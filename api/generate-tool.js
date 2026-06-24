@@ -331,7 +331,8 @@ export default async function handler(req, res) {
   if (!tool) {
     res.status(200).json({
       success: false,
-      message: `Tool inexistent: ${toolId}`,
+      message:
+        "Instrumentul nu a fost găsit în configurația Vercel. Verifică ToolId în Wix CMS și tools-config.js.",
     });
     return;
   }
