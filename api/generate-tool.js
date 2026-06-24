@@ -218,6 +218,10 @@ export default async function handler(req, res) {
   let categorySlug = "";
   // In-memory uploaded file (multipart only): { buffer, filename, mimetype }.
   let uploadedFile = null;
+  // Improve mode: regenerate an improved version of a previous result.
+  let improveMode = false;
+  let previousResult = "";
+  let improvementInstruction = "";
 
   const contentType = String(req.headers["content-type"] || "").toLowerCase();
 
@@ -228,6 +232,14 @@ export default async function handler(req, res) {
 
       toolId = String(firstValue(fields.toolId) || "").trim();
       categorySlug = String(firstValue(fields.categorySlug) || "").trim();
+
+      // Improve mode fields (optional).
+      const improveRaw = firstValue(fields.improveMode);
+      improveMode = improveRaw === true || String(improveRaw) === "true";
+      previousResult = String(firstValue(fields.previousResult) || "");
+      improvementInstruction = String(
+        firstValue(fields.improvementInstruction) || "",
+      );
 
       // `input` is a JSON string; accept `userInput` as an alias.
       const inputRaw = firstValue(fields.input) ?? firstValue(fields.userInput);
@@ -293,6 +305,15 @@ export default async function handler(req, res) {
     categorySlug =
       typeof body.categorySlug === "string" ? body.categorySlug.trim() : "";
 
+    // Improve mode fields (optional).
+    improveMode = body.improveMode === true || body.improveMode === "true";
+    previousResult =
+      typeof body.previousResult === "string" ? body.previousResult : "";
+    improvementInstruction =
+      typeof body.improvementInstruction === "string"
+        ? body.improvementInstruction
+        : "";
+
     // Accept both `userInput` (existing frontend) and `input` (string or object).
     if (body.userInput && typeof body.userInput === "object") {
       userInput = body.userInput;
@@ -346,6 +367,15 @@ export default async function handler(req, res) {
     return;
   }
 
+  // In improve mode, require a meaningful improvement instruction.
+  if (improveMode && improvementInstruction.trim().length < 3) {
+    res.status(200).json({
+      success: false,
+      message: "Te rugăm să scrii ce vrei să modificăm.",
+    });
+    return;
+  }
+
   // Validate required fields from the tool config.
   const missingFields = (tool.requiredFields || []).filter((field) => {
     const value = userInput[field];
@@ -382,6 +412,7 @@ export default async function handler(req, res) {
   const combinedText = [
     toolId,
     categorySlug,
+    improvementInstruction,
     ...Object.values(userInput).map((v) => String(v)),
   ]
     .join(" ")
@@ -415,7 +446,9 @@ export default async function handler(req, res) {
       },
       body: JSON.stringify({
         model: "omni-moderation-latest",
-        input: `Tool: ${toolId}\nCategorie: ${categorySlug}\nDate:\n${formattedInput}`,
+        input: `Tool: ${toolId}\nCategorie: ${categorySlug}\nDate:\n${formattedInput}${
+          improveMode ? `\nModificare cerută:\n${improvementInstruction}` : ""
+        }`,
       }),
     });
 
@@ -571,7 +604,28 @@ export default async function handler(req, res) {
       ? tool.buildUserPrompt(finalInput).trim()
       : `Date introduse de utilizator:\n${formattedInput}`;
 
-  const userPrompt = `${toolInputSection}
+  // In improve mode, give the model the previous result plus the user's
+  // modification request, and ask it to return only the improved final result.
+  const improvementSection = improveMode
+    ? `
+
+Aceasta este o cerere de ÎMBUNĂTĂȚIRE a unui rezultat generat anterior cu același instrument și aceleași date.
+
+Rezultatul anterior:
+${previousResult || "(rezultatul anterior nu a fost furnizat)"}
+
+Modificarea cerută de utilizator:
+${improvementInstruction.trim()}
+
+Reguli pentru îmbunătățire:
+- Respectă întocmai cererea de modificare a utilizatorului.
+- Păstrează obiectivul original al instrumentului și al datelor introduse.
+- Pornește de la rezultatul anterior și îmbunătățește-l, nu o lua de la zero fără motiv.
+- Nu explica ce ai schimbat și nu descrie modificările făcute.
+- Returnează doar noul rezultat final îmbunătățit, în același format.`
+    : "";
+
+  const userPrompt = `${toolInputSection}${improvementSection}
 
 Instrucțiuni pentru răspuns:
 - Răspunde în limba română.
