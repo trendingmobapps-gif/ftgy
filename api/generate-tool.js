@@ -211,8 +211,15 @@ export default async function handler(req, res) {
     return;
   }
 
-  const userPrompt = `Date introduse de utilizator:
-${formattedInput}
+  // If the tool defines a buildUserPrompt(input) function, use it so the user's
+  // actual values (including optional fields) are injected into the prompt.
+  // Otherwise fall back to the generic formatted list of required fields.
+  const toolInputSection =
+    typeof tool.buildUserPrompt === "function"
+      ? tool.buildUserPrompt(userInput).trim()
+      : `Date introduse de utilizator:\n${formattedInput}`;
+
+  const userPrompt = `${toolInputSection}
 
 Instrucțiuni pentru răspuns:
 - Răspunde în limba română.
