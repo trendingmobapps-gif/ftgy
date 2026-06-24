@@ -11,6 +11,113 @@ function setCorsHeaders(res) {
   res.setHeader("Access-Control-Max-Age", "86400");
 }
 
+// Maximum number of characters of extracted document text we keep, so we don't
+// blow past the model context window.
+const MAX_EXTRACTED_CHARS = 40000;
+
+// Message returned when a PDF has no selectable text (scanned/image-only).
+const SCANNED_PDF_MESSAGE =
+  "Documentul pare scanat sau nu conține text selectabil. Te rog încarcă un PDF text-based sau copiază textul manual.";
+
+// Wix upload fields can arrive as a plain URL string or as an object that
+// contains the URL under various keys. Normalize all of those to a string URL.
+function normalizeFileUrl(fileInput) {
+  if (!fileInput) return "";
+  if (typeof fileInput === "string") return fileInput.trim();
+  if (Array.isArray(fileInput)) {
+    return normalizeFileUrl(fileInput[0]);
+  }
+  if (typeof fileInput === "object") {
+    const candidate =
+      fileInput.url ||
+      fileInput.fileUrl ||
+      fileInput.src ||
+      fileInput.downloadUrl ||
+      fileInput.link ||
+      "";
+    return String(candidate).trim();
+  }
+  return "";
+}
+
+// Downloads an uploaded file (PDF / DOCX / TXT) and extracts its plain text.
+// Accepts either a direct URL string or an object with a url/fileUrl property.
+async function extractTextFromUploadedFile(fileInput) {
+  const url = normalizeFileUrl(fileInput);
+  if (!url) {
+    throw new Error("Fișierul nu are un URL valid.");
+  }
+
+  const response = await fetch(url);
+  if (!response.ok) {
+    throw new Error(
+      `Nu am putut descărca fișierul (status ${response.status}).`,
+    );
+  }
+
+  const contentType = (response.headers.get("content-type") || "").toLowerCase();
+  const arrayBuffer = await response.arrayBuffer();
+  const buffer = Buffer.from(arrayBuffer);
+
+  // Detect type from the file extension (ignoring any query string) and the
+  // content-type header.
+  const cleanUrl = url.split("?")[0].toLowerCase();
+  const ext = cleanUrl.slice(cleanUrl.lastIndexOf(".") + 1);
+
+  const isPdf = ext === "pdf" || contentType.includes("application/pdf");
+  const isDocx =
+    ext === "docx" ||
+    contentType.includes("officedocument.wordprocessingml");
+  const isDoc = ext === "doc" || contentType === "application/msword";
+  const isTxt =
+    ext === "txt" ||
+    contentType.includes("text/plain") ||
+    contentType.startsWith("text/");
+
+  let text = "";
+
+  if (isPdf) {
+    const { PDFParse } = await import("pdf-parse");
+    const parser = new PDFParse({ data: buffer });
+    try {
+      const result = await parser.getText();
+      text = (result?.text || "").trim();
+    } finally {
+      await parser.destroy();
+    }
+    if (!text) {
+      // Parsed fine but contains no extractable text -> scanned/image PDF.
+      throw new Error(SCANNED_PDF_MESSAGE);
+    }
+  } else if (isDocx) {
+    const mammoth = (await import("mammoth")).default;
+    const result = await mammoth.extractRawText({ buffer });
+    text = (result?.value || "").trim();
+  } else if (isTxt) {
+    text = buffer.toString("utf-8").trim();
+  } else if (isDoc) {
+    // Legacy binary .doc is not reliably parseable here.
+    throw new Error(
+      "Formatul .doc nu este suportat. Te rog încarcă un PDF, DOCX sau TXT, sau copiază textul manual.",
+    );
+  } else {
+    // Unknown type: best-effort read as plain text.
+    text = buffer.toString("utf-8").trim();
+    if (!text) {
+      throw new Error("Tip de fișier nesuportat sau fișier gol.");
+    }
+  }
+
+  // Limit extracted text so we don't exceed the model context window.
+  if (text.length > MAX_EXTRACTED_CHARS) {
+    text =
+      text.slice(0, MAX_EXTRACTED_CHARS) +
+      "\n\n[Text trunchiat pentru limită de lungime.]";
+  }
+
+  return text;
+}
+
 export default async function handler(req, res) {
   setCorsHeaders(res);
 
@@ -218,12 +325,68 @@ export default async function handler(req, res) {
     return;
   }
 
+  // --- Build the final input and extract uploaded document text (if any) ---
+  // The uploaded file (Wix CMS key: `fisierMaterial`) is optional. When present,
+  // we download it on the server, extract the text, and place it in
+  // `continutFisier` so the model receives the actual content, not just a URL.
+  let finalInput = { ...userInput };
+
+  if (finalInput.fisierMaterial) {
+    try {
+      const extractedText = await extractTextFromUploadedFile(
+        finalInput.fisierMaterial,
+      );
+      finalInput.continutFisier = extractedText;
+    } catch (error) {
+      console.error("File extraction error:", error);
+      finalInput.continutFisier = "";
+      finalInput.eroareFisier =
+        error?.message || "Fișierul nu a putut fi citit automat.";
+    }
+  }
+
+  // If the only content source was an uploaded file that we could not read, and
+  // the user did not paste any manual text alternative, return a clear message
+  // instead of generating a low-quality result.
+  if (finalInput.fisierMaterial && finalInput.eroareFisier) {
+    const manualTextFields = (tool.requiresAnyOf || []).filter(
+      (field) => field !== "fisierMaterial",
+    );
+    const hasManualText = manualTextFields.some((field) => {
+      const value = finalInput[field];
+      return value !== undefined && value !== null && String(value).trim() !== "";
+    });
+    if (!hasManualText) {
+      res.status(200).json({ success: false, message: finalInput.eroareFisier });
+      return;
+    }
+  }
+
+  // --- requiresAnyOf validation ---
+  // For tools that accept either manual text OR an uploaded file, ensure at
+  // least one of the listed fields has usable content.
+  if (tool.requiresAnyOf?.length) {
+    const hasAtLeastOne = tool.requiresAnyOf.some((field) => {
+      const value = finalInput[field];
+      return value !== undefined && value !== null && String(value).trim() !== "";
+    });
+
+    if (!hasAtLeastOne) {
+      res.status(200).json({
+        success: false,
+        message: "Completează textul manual sau încarcă un fișier.",
+        requiredAnyOf: tool.requiresAnyOf,
+      });
+      return;
+    }
+  }
+
   // If the tool defines a buildUserPrompt(input) function, use it so the user's
-  // actual values (including optional fields) are injected into the prompt.
-  // Otherwise fall back to the generic formatted list of required fields.
+  // actual values (including optional fields and extracted file text) are
+  // injected into the prompt. Otherwise fall back to the generic formatted list.
   const toolInputSection =
     typeof tool.buildUserPrompt === "function"
-      ? tool.buildUserPrompt(userInput).trim()
+      ? tool.buildUserPrompt(finalInput).trim()
       : `Date introduse de utilizator:\n${formattedInput}`;
 
   const userPrompt = `${toolInputSection}
