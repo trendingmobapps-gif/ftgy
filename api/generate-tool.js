@@ -40,8 +40,15 @@ export default async function handler(req, res) {
   body = body || {};
 
   const toolId = typeof body.toolId === "string" ? body.toolId.trim() : "";
-  const userInput =
-    body.userInput && typeof body.userInput === "object" ? body.userInput : null;
+  // Accept both `userInput` (existing frontend) and `input` (new structure) for
+  // backward compatibility. The first valid object wins.
+  const rawInput =
+    body.userInput && typeof body.userInput === "object"
+      ? body.userInput
+      : body.input && typeof body.input === "object"
+        ? body.input
+        : null;
+  const userInput = rawInput;
 
   // Validate toolId.
   if (!toolId) {
