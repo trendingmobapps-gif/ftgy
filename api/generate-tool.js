@@ -1,7 +1,40 @@
 // Vercel Serverless Function: POST /api/generate-tool
 // Generates a tool-specific result using OpenAI, based on the tool config.
+//
+// Accepts BOTH:
+//   1) multipart/form-data  -> fields: toolId, input (JSON string), categorySlug
+//      (optional), and an optional file field `fisierMaterial`. The file is
+//      parsed in-memory, its text is extracted, and the file is NOT stored.
+//   2) application/json      -> { toolId, input | userInput, categorySlug }.
+//      For backward compatibility, `fisierMaterial` may be a public URL string.
 
 import { TOOLS } from "../tools/tools-config.js";
+import formidable from "formidable";
+import { readFile, unlink } from "node:fs/promises";
+
+// Disable Vercel/Next automatic body parsing so we can read the raw stream for
+// multipart/form-data with formidable. (No effect on plain Vercel functions for
+// multipart, which is never auto-parsed; kept for correctness/future-proofing.)
+export const config = {
+  api: {
+    bodyParser: false,
+  },
+};
+
+// Maximum uploaded file size (10MB).
+const MAX_FILE_SIZE = 10 * 1024 * 1024;
+
+// Maximum number of characters of extracted document text we keep, so we don't
+// blow past the model context window.
+const MAX_EXTRACTED_CHARS = 40000;
+
+// Generic message when a file exists but cannot be read/parsed.
+const FILE_UNREADABLE_MESSAGE =
+  "Fișierul nu a putut fi citit. Încearcă alt document sau copiază textul manual.";
+
+// Message returned when a PDF has no selectable text (scanned/image-only).
+const SCANNED_PDF_MESSAGE =
+  "PDF-ul pare scanat sau imagine. Te rog încarcă un PDF text-based sau copiază textul manual.";
 
 function setCorsHeaders(res) {
   // Allow the endpoint to be called from your Wix website (and any other origin).
@@ -11,118 +44,74 @@ function setCorsHeaders(res) {
   res.setHeader("Access-Control-Max-Age", "86400");
 }
 
-// Maximum number of characters of extracted document text we keep, so we don't
-// blow past the model context window.
-const MAX_EXTRACTED_CHARS = 40000;
-
-// Message returned when a PDF has no selectable text (scanned/image-only).
-const SCANNED_PDF_MESSAGE =
-  "Documentul pare scanat sau nu conține text selectabil. Te rog încarcă un PDF text-based sau copiază textul manual.";
-
-// Converts a Wix internal media URI (wix:image://, wix:document://, wix:video://)
-// into a publicly accessible HTTPS URL that the backend can download.
-// Returns the original string if it is not a recognized Wix URI.
-function convertWixInternalUrl(value) {
-  if (typeof value !== "string") return "";
-  const str = value.trim();
-
-  // wix:image://v1/<mediaId>/<filename>#... -> https://static.wixstatic.com/media/<mediaId>
-  if (str.startsWith("wix:image://")) {
-    const withoutPrefix = str.replace("wix:image://v1/", "").replace("wix:image://", "");
-    const mediaId = withoutPrefix.split("/")[0].split("#")[0];
-    return mediaId ? `https://static.wixstatic.com/media/${mediaId}` : "";
-  }
-
-  // wix:document://v1/<docPath>/<filename> -> https://docs.wixstatic.com/ugd/<docPath>
-  // The docPath may itself contain slashes, so strip only the trailing filename.
-  if (str.startsWith("wix:document://")) {
-    const withoutPrefix = str
-      .replace("wix:document://v1/", "")
-      .replace("wix:document://", "")
-      .split("#")[0];
-    const lastSlash = withoutPrefix.lastIndexOf("/");
-    const docPath =
-      lastSlash > 0 ? withoutPrefix.slice(0, lastSlash) : withoutPrefix;
-    if (!docPath) return "";
-    // Wix serves uploaded documents from the docs CDN.
-    const normalized = docPath.startsWith("ugd/") ? docPath : `ugd/${docPath}`;
-    return `https://docs.wixstatic.com/${normalized}`;
-  }
-
-  return str;
+// Parses a multipart/form-data request using formidable. Returns { fields, files }.
+function parseMultipartForm(req) {
+  const form = formidable({
+    maxFiles: 1,
+    maxFileSize: MAX_FILE_SIZE,
+    keepExtensions: true,
+    multiples: false,
+  });
+  return new Promise((resolve, reject) => {
+    form.parse(req, (err, fields, files) => {
+      if (err) {
+        reject(err);
+        return;
+      }
+      resolve({ fields, files });
+    });
+  });
 }
 
-// Wix upload fields can arrive as a plain URL string or as an object that
-// contains the URL under various keys (url, fileUrl, mediaUrl, src, ...).
-// Normalize all of those to a single string URL, converting Wix internal URIs.
-function getFileUrl(fileInput) {
-  if (!fileInput) return "";
-  if (typeof fileInput === "string") {
-    return convertWixInternalUrl(fileInput.trim());
-  }
-  if (Array.isArray(fileInput)) {
-    return getFileUrl(fileInput[0]);
-  }
-  if (typeof fileInput === "object") {
-    const candidate =
-      fileInput.url ||
-      fileInput.fileUrl ||
-      fileInput.mediaUrl ||
-      fileInput.src ||
-      fileInput.downloadUrl ||
-      fileInput.link ||
-      fileInput.fileUri ||
-      fileInput.uri ||
-      "";
-    return convertWixInternalUrl(String(candidate).trim());
-  }
-  return "";
+// formidable v3 returns every field/file as an array. Read the first value.
+function firstValue(value) {
+  if (Array.isArray(value)) return value[0];
+  return value;
 }
 
-// Downloads an uploaded file (PDF / DOCX / TXT) and extracts its plain text.
-// Accepts either a direct URL string or an object with a url/fileUrl property.
-async function extractTextFromUploadedFile(fileInput) {
-  const url = getFileUrl(fileInput);
+// Reads and JSON-parses the raw request body from the stream. Used as a fallback
+// for the JSON flow when automatic body parsing is disabled (bodyParser: false)
+// or unavailable, so the endpoint works regardless of platform behavior.
+function readJsonBody(req) {
+  return new Promise((resolve) => {
+    let raw = "";
+    req.on("data", (chunk) => {
+      raw += chunk;
+    });
+    req.on("end", () => {
+      if (!raw) {
+        resolve({});
+        return;
+      }
+      try {
+        resolve(JSON.parse(raw));
+      } catch {
+        resolve({});
+      }
+    });
+    req.on("error", () => resolve({}));
+  });
+}
 
-  // Debug: log exactly what we resolved from the raw file input.
-  console.log("[v0] Resolved file URL:", url || "(empty)");
-
-  if (!url) {
-    throw new Error(
-      "Fișierul nu are un URL valid. Verifică upload-ul din Wix (trimite url/fileUrl/mediaUrl).",
-    );
+// Extracts plain text from an in-memory file buffer based on its filename
+// extension and mimetype. Supports PDF, DOCX and TXT. Returns trimmed text.
+async function extractTextFromBuffer(buffer, { filename = "", mimetype = "" } = {}) {
+  if (!buffer || buffer.length === 0) {
+    throw new Error(FILE_UNREADABLE_MESSAGE);
   }
-  if (!/^https?:\/\//i.test(url)) {
-    throw new Error(
-      "Fișierul nu are un URL public valid. Verifică upload-ul din Wix (URL intern wix: trebuie convertit în URL public).",
-    );
-  }
 
-  const response = await fetch(url);
-  if (!response.ok) {
-    throw new Error(
-      `Nu am putut descărca fișierul (status ${response.status}).`,
-    );
-  }
+  const lowerName = String(filename).split("?")[0].toLowerCase();
+  const ext = lowerName.includes(".")
+    ? lowerName.slice(lowerName.lastIndexOf(".") + 1)
+    : "";
+  const ct = String(mimetype).toLowerCase();
 
-  const contentType = (response.headers.get("content-type") || "").toLowerCase();
-  const arrayBuffer = await response.arrayBuffer();
-  const buffer = Buffer.from(arrayBuffer);
-
-  // Detect type from the file extension (ignoring any query string) and the
-  // content-type header.
-  const cleanUrl = url.split("?")[0].toLowerCase();
-  const ext = cleanUrl.slice(cleanUrl.lastIndexOf(".") + 1);
-
-  const isPdf = ext === "pdf" || contentType.includes("application/pdf");
+  const isPdf = ext === "pdf" || ct.includes("application/pdf");
   const isDocx =
-    ext === "docx" ||
-    contentType.includes("officedocument.wordprocessingml");
-  const isDoc = ext === "doc" || contentType === "application/msword";
+    ext === "docx" || ct.includes("officedocument.wordprocessingml");
+  const isDoc = ext === "doc" || ct === "application/msword";
   const isTxt =
-    ext === "txt" ||
-    contentType.includes("text/plain") ||
-    contentType.startsWith("text/");
+    ext === "txt" || ct.includes("text/plain") || ct.startsWith("text/");
 
   let text = "";
 
@@ -148,14 +137,18 @@ async function extractTextFromUploadedFile(fileInput) {
   } else if (isDoc) {
     // Legacy binary .doc is not reliably parseable here.
     throw new Error(
-      "Formatul .doc nu este suportat. Te rog încarcă un PDF, DOCX sau TXT, sau copiază textul manual.",
+      "Formatul .doc nu este suportat. Formatele recomandate sunt .pdf, .docx sau .txt, sau copiază textul manual.",
     );
   } else {
     // Unknown type: best-effort read as plain text.
     text = buffer.toString("utf-8").trim();
     if (!text) {
-      throw new Error("Tip de fișier nesuportat sau fișier gol.");
+      throw new Error(FILE_UNREADABLE_MESSAGE);
     }
+  }
+
+  if (!text) {
+    throw new Error(FILE_UNREADABLE_MESSAGE);
   }
 
   // Limit extracted text so we don't exceed the model context window.
@@ -166,6 +159,32 @@ async function extractTextFromUploadedFile(fileInput) {
   }
 
   return text;
+}
+
+// Backward-compatibility helper for the JSON flow: when `fisierMaterial` is a
+// public URL string, download it and extract its text. (No Wix credentials.)
+async function extractTextFromUrl(url) {
+  const cleanInput = String(url || "").trim();
+  if (!/^https?:\/\//i.test(cleanInput)) {
+    throw new Error(FILE_UNREADABLE_MESSAGE);
+  }
+
+  const response = await fetch(cleanInput);
+  if (!response.ok) {
+    throw new Error(
+      `Nu am putut descărca fișierul (status ${response.status}).`,
+    );
+  }
+
+  const contentType = (response.headers.get("content-type") || "").toLowerCase();
+  const arrayBuffer = await response.arrayBuffer();
+  const buffer = Buffer.from(arrayBuffer);
+  const cleanUrl = cleanInput.split("?")[0];
+
+  return extractTextFromBuffer(buffer, {
+    filename: cleanUrl,
+    mimetype: contentType,
+  });
 }
 
 export default async function handler(req, res) {
@@ -185,38 +204,110 @@ export default async function handler(req, res) {
     return;
   }
 
-  // Parse body (Vercel usually parses JSON automatically, but be defensive).
-  let body = req.body;
-  if (typeof body === "string") {
+  // --- Parse the request: multipart/form-data OR application/json ---
+  let toolId = "";
+  let userInput = null;
+  let categorySlug = "";
+  // In-memory uploaded file (multipart only): { buffer, filename, mimetype }.
+  let uploadedFile = null;
+
+  const contentType = String(req.headers["content-type"] || "").toLowerCase();
+
+  if (contentType.includes("multipart/form-data")) {
+    let tmpFilePath = "";
     try {
-      body = JSON.parse(body || "{}");
-    } catch {
-      body = {};
+      const { fields, files } = await parseMultipartForm(req);
+
+      toolId = String(firstValue(fields.toolId) || "").trim();
+      categorySlug = String(firstValue(fields.categorySlug) || "").trim();
+
+      // `input` is a JSON string; accept `userInput` as an alias.
+      const inputRaw = firstValue(fields.input) ?? firstValue(fields.userInput);
+      if (inputRaw) {
+        try {
+          userInput =
+            typeof inputRaw === "string" ? JSON.parse(inputRaw) : inputRaw;
+        } catch {
+          userInput = null;
+        }
+      }
+
+      // Optional uploaded file field: `fisierMaterial`.
+      const fileObj = firstValue(files.fisierMaterial);
+      if (fileObj && fileObj.filepath) {
+        tmpFilePath = fileObj.filepath;
+        const buffer = await readFile(fileObj.filepath);
+        uploadedFile = {
+          buffer,
+          filename: fileObj.originalFilename || fileObj.newFilename || "",
+          mimetype: fileObj.mimetype || "",
+        };
+      }
+    } catch (error) {
+      console.log("[v0] Multipart parse error:", error?.message);
+      const tooLarge = /maxFileSize|exceeded|maxTotalFileSize/i.test(
+        error?.message || "",
+      );
+      res.status(200).json({
+        success: false,
+        message: tooLarge
+          ? "Fișierul este prea mare. Limita este de 10MB."
+          : "Nu am putut procesa datele trimise. Verifică formularul și încearcă din nou.",
+      });
+      return;
+    } finally {
+      // Never persist the uploaded file: delete the temp file after reading.
+      if (tmpFilePath) {
+        try {
+          await unlink(tmpFilePath);
+        } catch {
+          // ignore cleanup errors
+        }
+      }
+    }
+  } else {
+    // JSON flow. Use the pre-parsed body if available; otherwise read the raw
+    // stream (needed when bodyParser is disabled or not provided by the host).
+    let body = req.body;
+    if (typeof body === "string") {
+      try {
+        body = JSON.parse(body || "{}");
+      } catch {
+        body = {};
+      }
+    }
+    if (!body || typeof body !== "object") {
+      body = await readJsonBody(req);
+    }
+    body = body || {};
+
+    toolId = typeof body.toolId === "string" ? body.toolId.trim() : "";
+    categorySlug =
+      typeof body.categorySlug === "string" ? body.categorySlug.trim() : "";
+
+    // Accept both `userInput` (existing frontend) and `input` (string or object).
+    if (body.userInput && typeof body.userInput === "object") {
+      userInput = body.userInput;
+    } else if (body.input && typeof body.input === "object") {
+      userInput = body.input;
+    } else if (typeof body.input === "string") {
+      try {
+        userInput = JSON.parse(body.input);
+      } catch {
+        userInput = null;
+      }
     }
   }
-  body = body || {};
 
-  const toolId = typeof body.toolId === "string" ? body.toolId.trim() : "";
-  // Accept both `userInput` (existing frontend) and `input` (new structure) for
-  // backward compatibility. The first valid object wins.
-  const rawInput =
-    body.userInput && typeof body.userInput === "object"
-      ? body.userInput
-      : body.input && typeof body.input === "object"
-        ? body.input
-        : null;
-  const userInput = rawInput;
-
-  // Debug: log the incoming payload so we can see exactly what Wix sends,
-  // including the shape of any uploaded file field (e.g. `fisierMaterial`).
+  // Debug: log exactly what arrived so we can confirm the payload shape.
   console.log("[v0] Incoming toolId:", toolId);
   console.log("[v0] Incoming input payload:", JSON.stringify(userInput));
-  if (userInput && userInput.fisierMaterial !== undefined) {
-    console.log(
-      "[v0] fisierMaterial raw value:",
-      JSON.stringify(userInput.fisierMaterial),
-    );
-  }
+  console.log(
+    "[v0] Uploaded file:",
+    uploadedFile
+      ? `${uploadedFile.filename} (${uploadedFile.mimetype}, ${uploadedFile.buffer.length} bytes)`
+      : "(none)",
+  );
 
   // Validate toolId.
   if (!toolId) {
@@ -238,10 +329,10 @@ export default async function handler(req, res) {
   }
 
   // Validate userInput object.
-  if (!userInput) {
+  if (!userInput || typeof userInput !== "object") {
     res.status(200).json({
       success: false,
-      message: "Lipsește userInput sau nu este un obiect valid.",
+      message: "Lipsește input sau nu este un obiect valid.",
     });
     return;
   }
@@ -279,8 +370,6 @@ export default async function handler(req, res) {
 
   // --- Safety filter (runs BEFORE generation) ---
   // 1) Lightweight keyword pre-check on toolId, categorySlug and all user input values.
-  const categorySlug =
-    typeof body.categorySlug === "string" ? body.categorySlug.trim() : "";
   const combinedText = [
     toolId,
     categorySlug,
@@ -387,35 +476,49 @@ export default async function handler(req, res) {
   }
 
   // --- Build the final input and extract uploaded document text (if any) ---
-  // The uploaded file (Wix CMS key: `fisierMaterial`) is optional. When present,
-  // we download it on the server, extract the text, and place it in
-  // `continutFisier` so the model receives the actual content, not just a URL.
-  let finalInput = { ...userInput };
+  // The uploaded file is optional. When present we extract its text on the
+  // server and place it in `continutFisier` so the model receives the actual
+  // content, never the raw file. We do not store the document.
+  const finalInput = { ...userInput };
+  // Whether the request included a file attempt (multipart buffer OR JSON URL).
+  const hadFileUpload = !!uploadedFile || !!userInput.fisierMaterial;
 
-  if (finalInput.fisierMaterial) {
+  if (uploadedFile) {
+    // Primary flow: file uploaded directly via multipart/form-data.
     try {
-      const extractedText = await extractTextFromUploadedFile(
-        finalInput.fisierMaterial,
+      finalInput.continutFisier = await extractTextFromBuffer(
+        uploadedFile.buffer,
+        uploadedFile,
       );
-      finalInput.continutFisier = extractedText;
     } catch (error) {
-      console.error("File extraction error:", error);
+      console.log("[v0] File extraction error (multipart):", error?.message);
       finalInput.continutFisier = "";
-      finalInput.eroareFisier =
-        error?.message || "Fișierul nu a putut fi citit automat.";
+      finalInput.eroareFisier = error?.message || FILE_UNREADABLE_MESSAGE;
+    }
+  } else if (userInput.fisierMaterial) {
+    // Backward-compatibility: `fisierMaterial` provided as a public URL string.
+    try {
+      finalInput.continutFisier = await extractTextFromUrl(
+        userInput.fisierMaterial,
+      );
+    } catch (error) {
+      console.log("[v0] File extraction error (url):", error?.message);
+      finalInput.continutFisier = "";
+      finalInput.eroareFisier = error?.message || FILE_UNREADABLE_MESSAGE;
     }
   }
 
-  // If the only content source was an uploaded file that we could not read, and
-  // the user did not paste any manual text alternative, return a clear message
-  // instead of generating a low-quality result.
-  if (finalInput.fisierMaterial && finalInput.eroareFisier) {
+  // If a file was provided but could not be read, and the user did not paste any
+  // manual text alternative, return a clear message instead of a weak result.
+  if (hadFileUpload && finalInput.eroareFisier) {
     const manualTextFields = (tool.requiresAnyOf || []).filter(
       (field) => field !== "fisierMaterial",
     );
     const hasManualText = manualTextFields.some((field) => {
       const value = finalInput[field];
-      return value !== undefined && value !== null && String(value).trim() !== "";
+      return (
+        value !== undefined && value !== null && String(value).trim() !== ""
+      );
     });
     if (!hasManualText) {
       res.status(200).json({ success: false, message: finalInput.eroareFisier });
@@ -425,11 +528,20 @@ export default async function handler(req, res) {
 
   // --- requiresAnyOf validation ---
   // For tools that accept either manual text OR an uploaded file, ensure at
-  // least one of the listed fields has usable content.
+  // least one of the listed fields has usable content (file text counts).
   if (tool.requiresAnyOf?.length) {
     const hasAtLeastOne = tool.requiresAnyOf.some((field) => {
+      // An uploaded/extracted file satisfies the `fisierMaterial` requirement.
+      if (field === "fisierMaterial") {
+        return (
+          !!finalInput.continutFisier &&
+          String(finalInput.continutFisier).trim() !== ""
+        );
+      }
       const value = finalInput[field];
-      return value !== undefined && value !== null && String(value).trim() !== "";
+      return (
+        value !== undefined && value !== null && String(value).trim() !== ""
+      );
     });
 
     if (!hasAtLeastOne) {
