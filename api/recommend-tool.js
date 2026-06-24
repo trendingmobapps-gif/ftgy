@@ -1,5 +1,6 @@
 // Vercel Serverless Function: POST /api/recommend-tool
-// Recommends exactly ONE AI tool for a Romanian user request.
+// Recommends 1-3 AI tools for a Romanian user request: a single best tool for
+// specific requests, or 2-3 relevant tools for broad/general requests.
 //
 // The list of available tools is sent IN THE REQUEST BODY by the Wix Dashboard
 // (body.tools). This endpoint does NOT import tools-config.js and contains NO
@@ -192,7 +193,7 @@ export default async function handler(req, res) {
     })
     .join("\n");
 
-  const systemPrompt = `Ești un sistem de recomandare premium care alege EXACT UN SINGUR instrument AI dintr-o platformă, pe baza cererii utilizatorului scrisă în limba română.
+  const systemPrompt = `Ești un sistem de recomandare premium care alege instrumentul/instrumentele AI cele mai potrivite dintr-o platformă, pe baza cererii utilizatorului scrisă în limba română.
 
 Mai întâi verifici siguranța. O cerere este NESIGURĂ dacă implică ceva ilegal, dăunător, vulgar, obscen, sexual explicit, instigare la ură, violență, fraudă, scam, hacking, arme, droguri, automutilare (self-harm) sau conținut care nu este potrivit pentru întreaga familie.
 
@@ -200,10 +201,17 @@ Lista de instrumente disponibile (folosește DOAR aceste toolId-uri, nu inventa 
 ${toolListText}
 
 Reguli de alegere:
-- Recomandă EXACT un singur instrument.
-- Preferă cel mai specific instrument pentru obiectivul utilizatorului.
+- Analizează cererea și decide dacă este SPECIFICĂ sau GENERALĂ/AMPLĂ.
+- Dacă cererea este SPECIFICĂ (vizează clar un singur obiectiv), recomandă EXACT 1 instrument.
+- Dacă cererea este GENERALĂ, amplă sau s-ar potrivi cu mai multe instrumente utile, recomandă 2-3 instrumente relevante.
+- Recomandă minim 1 și maxim 3 instrumente.
+- Nu recomanda instrumente duplicate (fiecare toolId apare o singură dată).
+- Fiecare instrument recomandat trebuie să fie relevant pentru cerere.
+- Preferă instrumentele care ajută direct utilizatorul să își atingă obiectivul.
 - Folosește descrierea și beneficiile pentru a decide.
-- Dacă mai multe instrumente sunt similare, alege-l pe cel care rezolvă cel mai direct obiectivul utilizatorului.
+- Ordonează recomandările de la cea mai potrivită la cea mai puțin potrivită.
+
+Exemplu de cerere amplă: „Vreau să fac bani” se poate potrivi cu instrumente precum Plan de Afaceri, Strategie Marketing, Generator Reclame Meta.
 
 Reguli de răspuns (returnează DOAR un obiect JSON valid, fără text suplimentar):
 
@@ -213,14 +221,18 @@ Reguli de răspuns (returnează DOAR un obiect JSON valid, fără text supliment
 2. Dacă cererea este sigură DAR niciun instrument din listă nu se potrivește, returnează EXACT:
 { "status": "none" }
 
-3. Dacă cererea este sigură și există un instrument potrivit, returnează:
+3. Dacă cererea este sigură și există unul sau mai multe instrumente potrivite, returnează:
 {
   "status": "ok",
-  "toolId": "<toolId exact din listă>",
-  "reason": "<o propoziție scurtă în limba română care explică de ce este cel mai potrivit instrument>"
+  "recommendations": [
+    {
+      "toolId": "<toolId exact din listă>",
+      "reason": "<o propoziție scurtă în limba română care explică de ce este potrivit acest instrument>"
+    }
+  ]
 }
 
-toolId trebuie să fie identic cu unul din listă.`;
+Fiecare toolId trebuie să fie identic cu unul din listă. Returnează între 1 și 3 elemente în "recommendations".`;
 
   try {
     // Safety pass 2: OpenAI Moderation API. If flagged, do NOT recommend a tool.
@@ -303,12 +315,43 @@ toolId trebuie să fie identic cu unul din listă.`;
       return;
     }
 
-    // Resolve the chosen tool from the received tools only (never trust the
-    // model to invent a tool that was not sent in body.tools).
-    const chosen = parsed.status === "ok" ? toolsById.get(parsed.toolId) : null;
+    // Resolve the chosen tools from the received tools only (never trust the
+    // model to invent a tool that was not sent in body.tools). Supports the
+    // new `recommendations` array, with a fallback to a single `toolId` for
+    // backward compatibility.
+    let rawRecommendations = [];
+    if (parsed.status === "ok") {
+      if (Array.isArray(parsed.recommendations)) {
+        rawRecommendations = parsed.recommendations;
+      } else if (typeof parsed.toolId === "string") {
+        rawRecommendations = [{ toolId: parsed.toolId, reason: parsed.reason }];
+      }
+    }
 
-    // No relevant tool, or the model returned an unknown toolId.
-    if (!chosen) {
+    const seen = new Set();
+    const recommendations = [];
+    for (const rec of rawRecommendations) {
+      const toolId = rec && typeof rec.toolId === "string" ? rec.toolId : "";
+      const tool = toolsById.get(toolId);
+      // Skip unknown toolIds and duplicates.
+      if (!tool || seen.has(tool.toolId)) continue;
+      seen.add(tool.toolId);
+      recommendations.push({
+        toolId: tool.toolId,
+        toolName: tool.toolName,
+        categorySlug: tool.categorySlug,
+        slugInstrument: tool.slugInstrument,
+        reason:
+          typeof rec.reason === "string" && rec.reason.trim()
+            ? rec.reason.trim()
+            : "Acest instrument este potrivit pentru cererea ta.",
+      });
+      // Enforce maximum of 3 recommendations.
+      if (recommendations.length >= 3) break;
+    }
+
+    // No relevant tool, or the model returned only unknown toolIds.
+    if (recommendations.length === 0) {
       res.status(200).json({
         success: false,
         message: NO_MATCH_MESSAGE,
@@ -318,14 +361,7 @@ toolId trebuie să fie identic cu unul din listă.`;
 
     res.status(200).json({
       success: true,
-      toolId: chosen.toolId,
-      toolName: chosen.toolName,
-      categorySlug: chosen.categorySlug,
-      slugInstrument: chosen.slugInstrument,
-      reason:
-        typeof parsed.reason === "string" && parsed.reason.trim()
-          ? parsed.reason.trim()
-          : "Acest instrument este cel mai potrivit pentru cererea ta.",
+      recommendations,
     });
   } catch (error) {
     res.status(200).json({
