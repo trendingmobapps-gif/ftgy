@@ -206,40 +206,6 @@ export default async function handler(req, res) {
     return;
   }
 
-  // 2) Lightweight OpenAI validation call that returns ONLY JSON.
-  try {
-    const valRes = await fetch("https://api.openai.com/v1/chat/completions", {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        Authorization: `Bearer ${apiKey}`,
-      },
-      body: JSON.stringify({
-        model: "gpt-4o-mini",
-        temperature: 0,
-        max_tokens: 200,
-        response_format: { type: "json_object" },
-        messages: [
-          {
-            role: "system",
-            content: `Ești un validator de calitate a datelor introduse de utilizator pentru un instrument numit "${tool.toolId}".
-Rolul instrumentului: ${tool.systemPrompt.trim()}
-
-Sarcina ta: decide dacă datele introduse sunt suficient de clare, specifice și complete pentru a genera un rezultat profesional cu acest instrument.
-
-Consideră datele INVALIDE dacă sunt: prea vagi, prea scurte, generice, ambigue, incomplete, răspunsuri dintr-un singur cuvânt pentru câmpuri care necesită context, sau dacă nu explică efectiv ce este produsul/serviciul/contextul.
-Consideră datele VALIDE dacă oferă suficient context pentru un rezultat de calitate. Nu respinge datele bune.
-
-Returnează DOAR un obiect JSON valid în acest format exact:
-{ "isValid": true sau false, "reason": "motiv scurt în limba română" }`,
-          },
-          {
-            role: "user",
-            content: `Categorie: ${categorySlug}\nDate introduse:\n${formattedInput}`,
-          },
-        ],
-      }),
-    });
 
     if (valRes.ok) {
       const valData = await valRes.json();
