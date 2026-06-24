@@ -40,8 +40,15 @@ export default async function handler(req, res) {
   body = body || {};
 
   const toolId = typeof body.toolId === "string" ? body.toolId.trim() : "";
-  const userInput =
-    body.userInput && typeof body.userInput === "object" ? body.userInput : null;
+  // Accept both `userInput` (existing frontend) and `input` (new structure) for
+  // backward compatibility. The first valid object wins.
+  const rawInput =
+    body.userInput && typeof body.userInput === "object"
+      ? body.userInput
+      : body.input && typeof body.input === "object"
+        ? body.input
+        : null;
+  const userInput = rawInput;
 
   // Validate toolId.
   if (!toolId) {
@@ -211,8 +218,15 @@ export default async function handler(req, res) {
     return;
   }
 
-  const userPrompt = `Date introduse de utilizator:
-${formattedInput}
+  // If the tool defines a buildUserPrompt(input) function, use it so the user's
+  // actual values (including optional fields) are injected into the prompt.
+  // Otherwise fall back to the generic formatted list of required fields.
+  const toolInputSection =
+    typeof tool.buildUserPrompt === "function"
+      ? tool.buildUserPrompt(userInput).trim()
+      : `Date introduse de utilizator:\n${formattedInput}`;
+
+  const userPrompt = `${toolInputSection}
 
 Instrucțiuni pentru răspuns:
 - Răspunde în limba română.
