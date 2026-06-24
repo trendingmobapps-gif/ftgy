@@ -19,23 +19,62 @@ const MAX_EXTRACTED_CHARS = 40000;
 const SCANNED_PDF_MESSAGE =
   "Documentul pare scanat sau nu conține text selectabil. Te rog încarcă un PDF text-based sau copiază textul manual.";
 
+// Converts a Wix internal media URI (wix:image://, wix:document://, wix:video://)
+// into a publicly accessible HTTPS URL that the backend can download.
+// Returns the original string if it is not a recognized Wix URI.
+function convertWixInternalUrl(value) {
+  if (typeof value !== "string") return "";
+  const str = value.trim();
+
+  // wix:image://v1/<mediaId>/<filename>#... -> https://static.wixstatic.com/media/<mediaId>
+  if (str.startsWith("wix:image://")) {
+    const withoutPrefix = str.replace("wix:image://v1/", "").replace("wix:image://", "");
+    const mediaId = withoutPrefix.split("/")[0].split("#")[0];
+    return mediaId ? `https://static.wixstatic.com/media/${mediaId}` : "";
+  }
+
+  // wix:document://v1/<docPath>/<filename> -> https://docs.wixstatic.com/ugd/<docPath>
+  // The docPath may itself contain slashes, so strip only the trailing filename.
+  if (str.startsWith("wix:document://")) {
+    const withoutPrefix = str
+      .replace("wix:document://v1/", "")
+      .replace("wix:document://", "")
+      .split("#")[0];
+    const lastSlash = withoutPrefix.lastIndexOf("/");
+    const docPath =
+      lastSlash > 0 ? withoutPrefix.slice(0, lastSlash) : withoutPrefix;
+    if (!docPath) return "";
+    // Wix serves uploaded documents from the docs CDN.
+    const normalized = docPath.startsWith("ugd/") ? docPath : `ugd/${docPath}`;
+    return `https://docs.wixstatic.com/${normalized}`;
+  }
+
+  return str;
+}
+
 // Wix upload fields can arrive as a plain URL string or as an object that
-// contains the URL under various keys. Normalize all of those to a string URL.
-function normalizeFileUrl(fileInput) {
+// contains the URL under various keys (url, fileUrl, mediaUrl, src, ...).
+// Normalize all of those to a single string URL, converting Wix internal URIs.
+function getFileUrl(fileInput) {
   if (!fileInput) return "";
-  if (typeof fileInput === "string") return fileInput.trim();
+  if (typeof fileInput === "string") {
+    return convertWixInternalUrl(fileInput.trim());
+  }
   if (Array.isArray(fileInput)) {
-    return normalizeFileUrl(fileInput[0]);
+    return getFileUrl(fileInput[0]);
   }
   if (typeof fileInput === "object") {
     const candidate =
       fileInput.url ||
       fileInput.fileUrl ||
+      fileInput.mediaUrl ||
       fileInput.src ||
       fileInput.downloadUrl ||
       fileInput.link ||
+      fileInput.fileUri ||
+      fileInput.uri ||
       "";
-    return String(candidate).trim();
+    return convertWixInternalUrl(String(candidate).trim());
   }
   return "";
 }
@@ -43,9 +82,20 @@ function normalizeFileUrl(fileInput) {
 // Downloads an uploaded file (PDF / DOCX / TXT) and extracts its plain text.
 // Accepts either a direct URL string or an object with a url/fileUrl property.
 async function extractTextFromUploadedFile(fileInput) {
-  const url = normalizeFileUrl(fileInput);
+  const url = getFileUrl(fileInput);
+
+  // Debug: log exactly what we resolved from the raw file input.
+  console.log("[v0] Resolved file URL:", url || "(empty)");
+
   if (!url) {
-    throw new Error("Fișierul nu are un URL valid.");
+    throw new Error(
+      "Fișierul nu are un URL valid. Verifică upload-ul din Wix (trimite url/fileUrl/mediaUrl).",
+    );
+  }
+  if (!/^https?:\/\//i.test(url)) {
+    throw new Error(
+      "Fișierul nu are un URL public valid. Verifică upload-ul din Wix (URL intern wix: trebuie convertit în URL public).",
+    );
   }
 
   const response = await fetch(url);
@@ -156,6 +206,17 @@ export default async function handler(req, res) {
         ? body.input
         : null;
   const userInput = rawInput;
+
+  // Debug: log the incoming payload so we can see exactly what Wix sends,
+  // including the shape of any uploaded file field (e.g. `fisierMaterial`).
+  console.log("[v0] Incoming toolId:", toolId);
+  console.log("[v0] Incoming input payload:", JSON.stringify(userInput));
+  if (userInput && userInput.fisierMaterial !== undefined) {
+    console.log(
+      "[v0] fisierMaterial raw value:",
+      JSON.stringify(userInput.fisierMaterial),
+    );
+  }
 
   // Validate toolId.
   if (!toolId) {
