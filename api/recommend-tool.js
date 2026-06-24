@@ -1,14 +1,19 @@
 // Vercel Serverless Function: POST /api/recommend-tool
-// Recommends exactly ONE AI tool from the platform for a Romanian user request.
-// This endpoint does NOT generate the final tool result; it only recommends the
-// best matching tool so the Wix Dashboard can redirect to /instrument/{slugInstrument}.
-
-import { TOOLS } from "../tools/tools-config.js";
+// Recommends exactly ONE AI tool for a Romanian user request.
+//
+// The list of available tools is sent IN THE REQUEST BODY by the Wix Dashboard
+// (body.tools). This endpoint does NOT import tools-config.js and contains NO
+// hardcoded tools, so it works with any number of tools (160, 500, 1000+)
+// without requiring changes in Vercel whenever the Wix CMS is updated.
 
 // Single message returned for any unsafe / non-family-friendly search, whether
 // it is caught by the local blocklist, the OpenAI moderation API, or the model.
 const UNSAFE_SEARCH_MESSAGE =
   "Nu există un instrument potrivit pentru această căutare. Te rugăm să cauți din nou.";
+
+// Message returned when the request is safe but no suitable tool was found.
+const NO_MATCH_MESSAGE =
+  "Nu am găsit un instrument potrivit. Te rugăm să cauți din nou.";
 
 // Local blocklist of clearly unsafe terms (Romanian + English): vulgar language,
 // insults, sexual/explicit content, hate speech, violence, self-harm, illegal
@@ -60,20 +65,41 @@ function setCorsHeaders(res) {
   res.setHeader("Access-Control-Max-Age", "86400");
 }
 
-// Build a compact list of tools for the model. tools-config.js has no
-// `description` or `slugInstrument` fields, so we fall back to toolId for the
-// slug and omit the description when it is not available.
-function buildToolList() {
-  return Object.values(TOOLS).map((tool) => {
-    const slugInstrument = tool.slugInstrument || tool.toolId;
-    return {
-      toolId: tool.toolId,
-      name: tool.name,
-      categorySlug: tool.categorySlug,
-      description: tool.description || "",
-      slugInstrument,
-    };
-  });
+// Normalizes a single tool object received from Wix into a consistent shape.
+// Accepts both `toolName` and `name` for the tool's display name, and falls
+// back to `toolId` for the slug when `slugInstrument` is missing.
+function normalizeTool(tool) {
+  if (!tool || typeof tool !== "object") return null;
+
+  const toolId = typeof tool.toolId === "string" ? tool.toolId.trim() : "";
+  if (!toolId) return null;
+
+  const toolName =
+    (typeof tool.toolName === "string" && tool.toolName.trim()) ||
+    (typeof tool.name === "string" && tool.name.trim()) ||
+    toolId;
+
+  const categorySlug =
+    typeof tool.categorySlug === "string" ? tool.categorySlug.trim() : "";
+
+  const slugInstrument =
+    (typeof tool.slugInstrument === "string" && tool.slugInstrument.trim()) ||
+    toolId;
+
+  const description =
+    typeof tool.description === "string" ? tool.description.trim() : "";
+
+  // Benefits may arrive as an array or as a single string.
+  let benefits = [];
+  if (Array.isArray(tool.benefits)) {
+    benefits = tool.benefits
+      .map((b) => (typeof b === "string" ? b.trim() : ""))
+      .filter(Boolean);
+  } else if (typeof tool.benefits === "string" && tool.benefits.trim()) {
+    benefits = [tool.benefits.trim()];
+  }
+
+  return { toolId, toolName, categorySlug, slugInstrument, description, benefits };
 }
 
 export default async function handler(req, res) {
@@ -106,7 +132,7 @@ export default async function handler(req, res) {
 
   const query = typeof body.query === "string" ? body.query.trim() : "";
 
-  // Validation: missing or shorter than 3 characters. Do NOT call OpenAI.
+  // Validation: query must exist (and be at least 3 chars). Do NOT call OpenAI.
   if (!query || query.length < 3) {
     res.status(200).json({
       success: false,
@@ -114,6 +140,29 @@ export default async function handler(req, res) {
     });
     return;
   }
+
+  // Validation: tools must be a non-empty array sent from Wix.
+  if (!Array.isArray(body.tools) || body.tools.length === 0) {
+    res.status(200).json({
+      success: false,
+      message: "Lista de instrumente lipsește. Trimite body.tools din Wix.",
+    });
+    return;
+  }
+
+  // Normalize and keep only valid tools (those with a toolId).
+  const tools = body.tools.map(normalizeTool).filter(Boolean);
+  if (tools.length === 0) {
+    res.status(200).json({
+      success: false,
+      message: "Lista de instrumente lipsește. Trimite body.tools din Wix.",
+    });
+    return;
+  }
+
+  // Index tools by toolId so we can resolve the model's choice from the
+  // request data only (never trust the model to invent a tool).
+  const toolsById = new Map(tools.map((t) => [t.toolId, t]));
 
   // Safety pass 1: local blocklist. If flagged, do NOT call OpenAI at all.
   if (isBlockedQuery(query)) {
@@ -133,20 +182,28 @@ export default async function handler(req, res) {
     return;
   }
 
-  const tools = buildToolList();
+  // Build the tool list text for the model entirely from the received tools.
   const toolListText = tools
     .map((t) => {
-      const desc = t.description ? ` — ${t.description}` : "";
-      return `- toolId: ${t.toolId} | nume: ${t.name} | categorie: ${t.categorySlug}${desc}`;
+      const desc = t.description ? ` | descriere: ${t.description}` : "";
+      const benefits =
+        t.benefits.length > 0 ? ` | beneficii: ${t.benefits.join("; ")}` : "";
+      return `- toolId: ${t.toolId} | nume: ${t.toolName} | categorie: ${t.categorySlug}${desc}${benefits}`;
     })
     .join("\n");
 
   const systemPrompt = `Ești un sistem de recomandare premium care alege EXACT UN SINGUR instrument AI dintr-o platformă, pe baza cererii utilizatorului scrisă în limba română.
 
-Mai întâi verifici siguranța. O cerere este NESIGURĂ dacă implică ceva ilegal, dăunător, vulgar, sexual explicit, instigare la ură, violență, fraudă, hacking, arme, droguri, automutilare (self-harm) sau conținut care nu este potrivit pentru întreaga familie.
+Mai întâi verifici siguranța. O cerere este NESIGURĂ dacă implică ceva ilegal, dăunător, vulgar, obscen, sexual explicit, instigare la ură, violență, fraudă, scam, hacking, arme, droguri, automutilare (self-harm) sau conținut care nu este potrivit pentru întreaga familie.
 
 Lista de instrumente disponibile (folosește DOAR aceste toolId-uri, nu inventa altele):
 ${toolListText}
+
+Reguli de alegere:
+- Recomandă EXACT un singur instrument.
+- Preferă cel mai specific instrument pentru obiectivul utilizatorului.
+- Folosește descrierea și beneficiile pentru a decide.
+- Dacă mai multe instrumente sunt similare, alege-l pe cel care rezolvă cel mai direct obiectivul utilizatorului.
 
 Reguli de răspuns (returnează DOAR un obiect JSON valid, fără text suplimentar):
 
@@ -156,14 +213,14 @@ Reguli de răspuns (returnează DOAR un obiect JSON valid, fără text supliment
 2. Dacă cererea este sigură DAR niciun instrument din listă nu se potrivește, returnează EXACT:
 { "status": "none" }
 
-3. Dacă cererea este sigură și există un instrument potrivit, alege EXACT UNUL singur, cel mai potrivit, și returnează:
+3. Dacă cererea este sigură și există un instrument potrivit, returnează:
 {
   "status": "ok",
   "toolId": "<toolId exact din listă>",
   "reason": "<o propoziție scurtă în limba română care explică de ce este cel mai potrivit instrument>"
 }
 
-Alege un singur instrument. toolId trebuie să fie identic cu unul din listă.`;
+toolId trebuie să fie identic cu unul din listă.`;
 
   try {
     // Safety pass 2: OpenAI Moderation API. If flagged, do NOT recommend a tool.
@@ -246,14 +303,15 @@ Alege un singur instrument. toolId trebuie să fie identic cu unul din listă.`;
       return;
     }
 
-    // Resolve the chosen tool from our own config (never trust the model blindly).
-    const chosen = parsed.status === "ok" ? TOOLS[parsed.toolId] : null;
+    // Resolve the chosen tool from the received tools only (never trust the
+    // model to invent a tool that was not sent in body.tools).
+    const chosen = parsed.status === "ok" ? toolsById.get(parsed.toolId) : null;
 
     // No relevant tool, or the model returned an unknown toolId.
     if (!chosen) {
       res.status(200).json({
         success: false,
-        message: "Nu am găsit un instrument potrivit. Te rugăm să cauți din nou.",
+        message: NO_MATCH_MESSAGE,
       });
       return;
     }
@@ -261,13 +319,13 @@ Alege un singur instrument. toolId trebuie să fie identic cu unul din listă.`;
     res.status(200).json({
       success: true,
       toolId: chosen.toolId,
-      toolName: chosen.name,
+      toolName: chosen.toolName,
       categorySlug: chosen.categorySlug,
-      slugInstrument: chosen.slugInstrument || chosen.toolId,
+      slugInstrument: chosen.slugInstrument,
       reason:
         typeof parsed.reason === "string" && parsed.reason.trim()
           ? parsed.reason.trim()
-          : `Acest instrument este cel mai potrivit pentru cererea ta.`,
+          : "Acest instrument este cel mai potrivit pentru cererea ta.",
     });
   } catch (error) {
     res.status(200).json({
