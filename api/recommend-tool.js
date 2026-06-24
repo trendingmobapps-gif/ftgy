@@ -5,6 +5,53 @@
 
 import { TOOLS } from "../tools/tools-config.js";
 
+// Single message returned for any unsafe / non-family-friendly search, whether
+// it is caught by the local blocklist, the OpenAI moderation API, or the model.
+const UNSAFE_SEARCH_MESSAGE =
+  "Nu există un instrument potrivit pentru această căutare. Te rugăm să cauți din nou.";
+
+// Local blocklist of clearly unsafe terms (Romanian + English): vulgar language,
+// insults, sexual/explicit content, hate speech, violence, self-harm, illegal
+// activity, fraud, hacking, drugs, weapons, terrorism. This is a fast first pass
+// that runs BEFORE any OpenAI call so flagged queries never reach the API.
+const BLOCKLIST = [
+  // Romanian profanity / insults
+  "pula", "pizda", "muie", "muist", "futu", "fut ", "fute", "futut", "fute-",
+  "cacat", "căcat", "rahat", "dracu", "dracului", "bou", "boule", "prost",
+  "proasta", "proastă", "idiot", "idioata", "cretin", "tampit", "tâmpit",
+  "curva", "curvă", "curve", "tarfa", "târfă", "pizda", "sugi", "sug pula",
+  "bag pula", "bagpula", "labar", "laba", "coaie", "cur ", "fraier",
+  // English profanity / insults
+  "fuck", "shit", "bitch", "asshole", "bastard", "cunt", "dick", "pussy",
+  "whore", "slut", "motherfucker", "retard", "faggot", "nigger", "nigga",
+  // Sexual / explicit
+  "porn", "porno", "pornografie", "sex explicit", "xxx", "nud", "nuduri",
+  "masturb", "blowjob", "anal sex", "incest", "pedofil", "pedophile",
+  "child porn", "minori sex",
+  // Hate speech / violence / threats
+  "te omor", "sa te omor", "să te omor", "omor pe", "te bat", "te injunghii",
+  "kill you", "i will kill", "school shooting", "genocid", "exterminare",
+  // Self-harm
+  "sinucid", "sa ma sinucid", "să mă sinucid", "ma sinucid", "mă sinucid",
+  "vreau sa mor", "vreau să mor", "tai venele", "îmi tai venele",
+  "suicide", "kill myself", "self harm", "self-harm",
+  // Illegal / fraud / hacking / drugs / weapons / terrorism
+  "cum sa fur", "cum să fur", "spalare de bani", "spălare de bani",
+  "card clonat", "clonare card", "frauda card", "fraudă card", "phishing",
+  "cum sparg", "cum să sparg", "sparg parola", "hack ", "hacking", "ddos",
+  "ransomware", "malware keylogger", "cumpar droguri", "cumpăr droguri",
+  "vand droguri", "vând droguri", "cocaina", "cocaină", "heroina", "heroină",
+  "metamfetamina", "cum fac o bomba", "cum să fac o bombă", "fac o bomba",
+  "build a bomb", "make a bomb", "arma de foc ilegal", "atac terorist",
+  "terrorist attack", "isis",
+];
+
+// Returns true when the query contains an obviously unsafe term.
+function isBlockedQuery(query) {
+  const normalized = query.toLowerCase();
+  return BLOCKLIST.some((term) => normalized.includes(term));
+}
+
 function setCorsHeaders(res) {
   // Allow the endpoint to be called from your Wix dashboard (and any other origin).
   res.setHeader("Access-Control-Allow-Origin", "*");
@@ -68,6 +115,15 @@ export default async function handler(req, res) {
     return;
   }
 
+  // Safety pass 1: local blocklist. If flagged, do NOT call OpenAI at all.
+  if (isBlockedQuery(query)) {
+    res.status(200).json({
+      success: false,
+      message: UNSAFE_SEARCH_MESSAGE,
+    });
+    return;
+  }
+
   const apiKey = process.env.OPENAI_API_KEY;
   if (!apiKey) {
     res.status(200).json({
@@ -110,6 +166,37 @@ Reguli de răspuns (returnează DOAR un obiect JSON valid, fără text supliment
 Alege un singur instrument. toolId trebuie să fie identic cu unul din listă.`;
 
   try {
+    // Safety pass 2: OpenAI Moderation API. If flagged, do NOT recommend a tool.
+    try {
+      const modRes = await fetch("https://api.openai.com/v1/moderations", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${apiKey}`,
+        },
+        body: JSON.stringify({
+          model: "omni-moderation-latest",
+          input: query,
+        }),
+      });
+
+      if (modRes.ok) {
+        const modData = await modRes.json();
+        const flagged = modData?.results?.[0]?.flagged === true;
+        if (flagged) {
+          res.status(200).json({
+            success: false,
+            message: UNSAFE_SEARCH_MESSAGE,
+          });
+          return;
+        }
+      }
+      // If the moderation call fails (non-ok), fall through: the local blocklist
+      // already ran and the recommendation prompt enforces safety rules too.
+    } catch {
+      // Network/parse error on moderation: rely on blocklist + prompt safety.
+    }
+
     const openaiRes = await fetch("https://api.openai.com/v1/chat/completions", {
       method: "POST",
       headers: {
@@ -150,12 +237,11 @@ Alege un singur instrument. toolId trebuie să fie identic cu unul din listă.`;
       return;
     }
 
-    // Unsafe / non-family-friendly requests.
+    // Safety pass 3: model judged the request unsafe / non-family-friendly.
     if (parsed.status === "unsafe") {
       res.status(200).json({
         success: false,
-        message:
-          "Nu există un instrument potrivit pentru această căutare. Te rugăm să cauți din nou.",
+        message: UNSAFE_SEARCH_MESSAGE,
       });
       return;
     }
