@@ -337,7 +337,7 @@ Instrucțiuni de formatare:
 
     res.status(200).json({
       success: true,
-      toolId: tool.toolId,
+      toolId: tool.toolId,m
       result,
     });
   } catch (error) {
