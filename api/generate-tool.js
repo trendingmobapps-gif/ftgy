@@ -160,27 +160,29 @@ export default async function handler(req, res) {
     // Network/parse error on moderation: rely on prompt-level safety rules below.
   }
 
-  // --- Input quality validation (runs BEFORE generation) ---
-  // Goal: don't generate a weak result from vague/generic/incomplete input.
+  // --- Input quality validation (LOCAL ONLY, very permissive) ---
+  // Applies globally to every tool/category. We only block input that is
+  // clearly unusable or meaningless. Normal, imperfect input is accepted.
   const VAGUE_MESSAGE =
     "Pentru a genera un rezultat bun, avem nevoie de mai multe detalii. Te rugăm să completezi răspunsurile mai clar și mai specific.";
 
-  // 1) Lightweight local pre-check for EXTREMELY vague / unusable answers only.
-  // Single bare keywords with no extra context, or meaningless filler.
+  // Exact meaningless/generic answers (after trimming + lowercasing).
+  // These are bare keywords with no useful context, or filler.
   const GENERIC_ANSWERS = new Set([
-    "curs",
-    "produs",
-    "serviciu",
-    "afacere",
-    "ceva",
-    "orice",
     "nu stiu",
     "nu știu",
+    "ceva",
+    "orice",
     "nimic",
     "test",
     "asd",
     "asdf",
     "qwerty",
+    "curs",
+    "curs online",
+    "produs",
+    "serviciu",
+    "afacere",
     "n/a",
     "na",
     "-",
@@ -189,77 +191,25 @@ export default async function handler(req, res) {
     "...",
   ]);
 
-  // Only reject if EVERY required field is essentially unusable.
-  // This avoids blocking inputs that give at least basic context in one field.
-  const allFieldsVague = (tool.requiredFields || []).every((field) => {
-    const raw = String(userInput[field] ?? "").trim();
-    const normalized = raw.toLowerCase();
-    if (GENERIC_ANSWERS.has(normalized)) return true;
+  // A field is "usable" if it is NOT an exact generic answer and gives at least
+  // a little context (2+ words, OR a single word of 4+ characters).
+  const isFieldUsable = (field) => {
+    const normalized = String(userInput[field] ?? "")
+      .trim()
+      .toLowerCase();
+    if (!normalized) return false;
+    if (GENERIC_ANSWERS.has(normalized)) return false;
     const wordCount = normalized.split(/\s+/).filter(Boolean).length;
-    // Truly unusable: a single short word with no surrounding context.
-    if (wordCount <= 1 && normalized.length < 4) return true;
-    return false;
-  });
+    if (wordCount >= 2) return true; // "curs despre antreprenoriat" etc.
+    return normalized.length >= 4; // single meaningful word
+  };
 
-  if (allFieldsVague) {
+  // Reject only when NONE of the required fields are usable.
+  const hasUsableInput = (tool.requiredFields || []).some(isFieldUsable);
+  if (!hasUsableInput) {
     res.status(200).json({ success: false, message: VAGUE_MESSAGE });
     return;
   }
-
-  // 2) Lightweight OpenAI validation call that returns ONLY JSON.
-  /*
-  try {
-    const valRes = await fetch("https://api.openai.com/v1/chat/completions", {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        Authorization: `Bearer ${apiKey}`,
-      },
-      body: JSON.stringify({
-        model: "gpt-4o-mini",
-        temperature: 0,
-        max_tokens: 200,
-        response_format: { type: "json_object" },
-        messages: [
-          {
-            role: "system",
-            content: `Ești un validator de calitate a datelor introduse de utilizator pentru un instrument numit "${tool.toolId}".
-            Rolul instrumentului: ${tool.systemPrompt.trim()}
-
-            Sarcina ta: decide dacă datele introduse sunt suficient de clare, specifice și complete pentru a genera un rezultat profesional cu acest instrument.
-
-            Consideră datele INVALIDE dacă sunt: prea vagi, prea scurte, generice, ambigue, incomplete, răspunsuri dintr-un singur cuvânt pentru câmpuri care necesită context, sau dacă nu explică efectiv ce este produsul/serviciul/contextul.
-            Consideră datele VALIDE dacă oferă suficient context pentru un rezultat de calitate. Nu respinge datele bune.
-
-            Returnează DOAR un obiect JSON valid în acest format exact:
-            { "isValid": true sau false, "reason": "motiv scurt în limba română" }`,
-          },
-          {
-            role: "user",
-            content: `Categorie: ${categorySlug}\nDate introduse:\n${formattedInput}`,
-          },
-        ],
-      }),
-    });
-
-    if (valRes.ok) {
-      const valData = await valRes.json();
-      const valContent = valData?.choices?.[0]?.message?.content?.trim() || "";
-      try {
-        const parsed = JSON.parse(valContent);
-        if (parsed && parsed.isValid === false) {
-          res.status(200).json({ success: false, message: VAGUE_MESSAGE });
-          return;
-        }
-      } catch {
-        // If validation output isn't parseable, fall through to generation.
-      }
-    }
-    // If the validation call fails (non-ok), fall through to generation.
-  } catch {
-    // Network error during validation: don't block good inputs, continue.
-  }
-    */
 
   const userPrompt = `Date introduse de utilizator:
 ${formattedInput}
@@ -337,7 +287,7 @@ Instrucțiuni de formatare:
 
     res.status(200).json({
       success: true,
-      toolId: tool.toolId,m
+      toolId: tool.toolId,
       result,
     });
   } catch (error) {
