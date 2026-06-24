@@ -113,16 +113,24 @@ async function extractTextFromBuffer(buffer, { filename = "", mimetype = "" } = 
   const isTxt =
     ext === "txt" || ct.includes("text/plain") || ct.startsWith("text/");
 
+  // Debug: log details about the file being processed.
+  console.log("[v0] Extracting file:", filename || "(no name)");
+  console.log("[v0] File mimetype:", mimetype || "(none)");
+  console.log("[v0] File size:", buffer.length, "bytes");
+
   let text = "";
 
   if (isPdf) {
-    const { PDFParse } = await import("pdf-parse");
-    const parser = new PDFParse({ data: buffer });
+    // pdf-parse v1.1.1 is a pure-Node parser that does NOT require browser APIs
+    // like DOMMatrix/document/canvas (unlike pdfjs-dist based versions).
+    // Import the lib file directly to skip the package's debug entrypoint.
+    const pdfParse = (await import("pdf-parse/lib/pdf-parse.js")).default;
     try {
-      const result = await parser.getText();
-      text = (result?.text || "").trim();
-    } finally {
-      await parser.destroy();
+      const data = await pdfParse(buffer);
+      text = (data?.text || "").trim();
+    } catch (error) {
+      console.log("[v0] PDF parser error:", error);
+      throw new Error(SCANNED_PDF_MESSAGE);
     }
     if (!text) {
       // Parsed fine but contains no extractable text -> scanned/image PDF.
