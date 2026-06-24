@@ -5,5 +5,9 @@
   "description": "Vercel serverless API bridge that classifies Romanian user requests into categories using OpenAI. For use with Wix.",
   "scripts": {
     "build": "echo \"No build step required for serverless API\""
+  },
+  "dependencies": {
+    "mammoth": "^1.12.0",
+    "pdf-parse": "^2.4.5"
   }
 }
