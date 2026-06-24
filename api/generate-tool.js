@@ -207,7 +207,7 @@ export default async function handler(req, res) {
   }
 
   // 2) Lightweight OpenAI validation call that returns ONLY JSON.
-  
+  /*
   try {
     const valRes = await fetch("https://api.openai.com/v1/chat/completions", {
       method: "POST",
@@ -259,7 +259,7 @@ export default async function handler(req, res) {
   } catch {
     // Network error during validation: don't block good inputs, continue.
   }
-    
+    */
 
   const userPrompt = `Date introduse de utilizator:
 ${formattedInput}
