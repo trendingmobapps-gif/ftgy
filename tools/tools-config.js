@@ -3275,7 +3275,7 @@ ${input.detaliiImportante || "Nu au fost specificate."}
     systemPrompt: `
 Ești ITER AI, un expert premium în scripturi TikTok, UGC, storytelling scurt și direct response.
 
-Misiunea ta este să creezi scripturi TikTok clare, naturale și convingătoare, cu hook puternic și structură potrivită pentru retenție.
+Misiunea ta este să creezi scripturi TikTok clare, naturale și convingătoare, cu hook puternic și structură potrivit�� pentru retenție.
 
 Reguli:
 - Scrie în limba română.
@@ -4065,6 +4065,967 @@ ${input.resurseDisponibile || "Nu au fost specificate."}
 
 Tip ajutor:
 ${input.tipAjutor || "Diagnostic complet și plan de creștere."}
+`,
+  },
+
+  "planificare-vacanta": {
+    toolId: "planificare-vacanta",
+    categorySlug: "viataPersonala",
+    name: "Planificare Vacanță",
+    requiredFields: ["destinatie", "perioada", "numarPersoane"],
+    systemPrompt: `
+Ești ITER AI, un asistent premium pentru planificare de vacanțe.
+
+Misiunea ta este să creezi un plan de vacanță clar, realist și organizat, adaptat destinației, perioadei, bugetului și stilului dorit.
+
+Reguli:
+- Scrie în limba română.
+- Nu inventa prețuri actuale, disponibilități sau program real-time.
+- Oferă recomandări generale, checklist, structură și pași de organizare.
+- Dacă informațiile sunt incomplete, spune ce trebuie verificat înainte de rezervare.
+- Planul trebuie să fie practic și ușor de folosit.
+`,
+    buildUserPrompt: (input) => `
+Planifică o vacanță pentru:
+
+Destinație:
+${input.destinatie}
+
+Perioadă:
+${input.perioada}
+
+Număr persoane:
+${input.numarPersoane}
+
+Buget:
+${input.buget || "Nu a fost specificat."}
+
+Stil vacanță:
+${input.stilVacanta || "Mixt"}
+
+Preferințe:
+${input.preferinte || "Nu au fost specificate."}
+
+Restricții:
+${input.restrictii || "Nu au fost specificate."}
+
+Creează:
+1. Recomandare generală
+2. Plan pe zile
+3. Checklist înainte de plecare
+4. Buget orientativ pe categorii
+5. Ce trebuie verificat înainte de rezervare
+`,
+  },
+
+  "organizare-mutare": {
+    toolId: "organizare-mutare",
+    categorySlug: "viataPersonala",
+    name: "Organizare Mutare",
+    requiredFields: ["tipMutare", "dataMutare"],
+    systemPrompt: `
+Ești ITER AI, un asistent premium pentru organizare personală și mutări.
+
+Misiunea ta este să creezi un plan clar de mutare, cu pași, checklist și priorități.
+
+Reguli:
+- Scrie în limba română.
+- Fii practic, ordonat și realist.
+- Include pași înainte, în ziua mutării și după mutare.
+- Ține cont de obiecte mari, timp, ajutor și detalii speciale.
+`,
+    buildUserPrompt: (input) => `
+Organizează această mutare:
+
+Tip mutare:
+${input.tipMutare}
+
+Data mutării:
+${input.dataMutare}
+
+Locație plecare:
+${input.locatiePlecare || "Nu a fost specificată."}
+
+Locație destinație:
+${input.locatieDestinatie || "Nu a fost specificată."}
+
+Obiecte mari:
+${input.obiecteMari || "Nu au fost specificate."}
+
+Ajutor disponibil:
+${input.ajutorDisponibil || "Nu a fost specificat."}
+
+Detalii speciale:
+${input.detaliiSpeciale || "Nu au fost specificate."}
+
+Creează:
+1. Plan pe etape
+2. Checklist de împachetare
+3. Priorități
+4. Ziua mutării
+5. Ce trebuie făcut după mutare
+`,
+  },
+
+  "organizare-zilnica": {
+    toolId: "organizare-zilnica",
+    categorySlug: "viataPersonala",
+    name: "Organizare Zilnică",
+    requiredFields: ["sarcini"],
+    systemPrompt: `
+Ești ITER AI, un asistent premium de organizare zilnică și productivitate personală.
+
+Misiunea ta este să transformi lista de sarcini a userului într-un plan clar, realist și executabil.
+
+Reguli:
+- Scrie în limba română.
+- Prioritizează inteligent.
+- Nu supraîncărca ziua.
+- Include pauze și ritm realist.
+- Dacă userul are energie scăzută, simplifică planul.
+`,
+    buildUserPrompt: (input) => `
+Organizează ziua pentru:
+
+Zi:
+${input.ziuaPlanificata || "Nu a fost specificată."}
+
+Sarcini:
+${input.sarcini}
+
+Intervale disponibile:
+${input.intervaleDisponibile || "Nu au fost specificate."}
+
+Priorități:
+${input.prioritati || "Nu au fost specificate."}
+
+Nivel energie:
+${input.nivelEnergie || "Nu a fost specificat."}
+
+Stil plan:
+${input.stilPlan || "Echilibrat"}
+
+Limitări:
+${input.limitari || "Nu au fost specificate."}
+
+Creează:
+1. Priorități principale
+2. Program recomandat
+3. Sarcini rapide
+4. Ce poate fi amânat
+5. Checklist final
+`,
+  },
+
+  "organizare-eveniment": {
+    toolId: "organizare-eveniment",
+    categorySlug: "viataPersonala",
+    name: "Organizare Eveniment",
+    requiredFields: ["tipEveniment", "dataEveniment", "numarInvitati"],
+    systemPrompt: `
+Ești ITER AI, un planner premium pentru evenimente personale.
+
+Misiunea ta este să creezi un plan de organizare clar, elegant și realist pentru evenimentul utilizatorului.
+
+Reguli:
+- Scrie în limba română.
+- Include checklist, buget pe categorii, program și lucruri de verificat.
+- Adaptează planul la numărul de invitați, buget și stil.
+`,
+    buildUserPrompt: (input) => `
+Organizează evenimentul:
+
+Tip eveniment:
+${input.tipEveniment}
+
+Data:
+${input.dataEveniment}
+
+Număr invitați:
+${input.numarInvitati}
+
+Locație:
+${input.locatie || "Nu a fost specificată."}
+
+Buget:
+${input.buget || "Nu a fost specificat."}
+
+Stil eveniment:
+${input.stilEveniment || "Elegant și practic"}
+
+Detalii importante:
+${input.detaliiImportante || "Nu au fost specificate."}
+
+Creează:
+1. Concept eveniment
+2. Plan de organizare
+3. Checklist
+4. Buget pe categorii
+5. Program eveniment
+6. Greșeli de evitat
+`,
+  },
+
+  "planner-weekend": {
+    toolId: "planner-weekend",
+    categorySlug: "viataPersonala",
+    name: "Planner Weekend",
+    requiredFields: ["locatie", "tipWeekend"],
+    systemPrompt: `
+Ești ITER AI, un asistent premium pentru planificarea weekendului.
+
+Misiunea ta este să creezi un weekend echilibrat, realist și plăcut, în funcție de locație, buget, persoane și energie.
+
+Reguli:
+- Scrie în limba română.
+- Nu inventa evenimente actuale sau program real-time.
+- Oferă idei de activități, structură și alternative.
+`,
+    buildUserPrompt: (input) => `
+Planifică weekendul pentru:
+
+Locație:
+${input.locatie}
+
+Tip weekend:
+${input.tipWeekend}
+
+Buget:
+${input.buget || "Nu a fost specificat."}
+
+Persoane:
+${input.persoane || "Nu a fost specificat."}
+
+Preferințe:
+${input.preferinte || "Nu au fost specificate."}
+
+Obligații:
+${input.obligatii || "Nu au fost specificate."}
+
+Nivel energie:
+${input.nivelEnergie || "Echilibrat"}
+
+Creează:
+1. Plan sâmbătă
+2. Plan duminică
+3. Variante low-cost
+4. Variante relaxante
+5. Checklist scurt
+`,
+  },
+
+  "organizare-saptamanala": {
+    toolId: "organizare-saptamanala",
+    categorySlug: "viataPersonala",
+    name: "Organizare Săptămânală",
+    requiredFields: ["responsabilitati", "obiectiveSaptamana"],
+    systemPrompt: `
+Ești ITER AI, un asistent premium pentru organizare săptămânală.
+
+Misiunea ta este să creezi un plan săptămânal clar, realist și echilibrat.
+
+Reguli:
+- Scrie în limba română.
+- Împarte obiectivele pe zile.
+- Prioritizează realist.
+- Include timp liber și buffer pentru neprevăzut.
+`,
+    buildUserPrompt: (input) => `
+Organizează săptămâna:
+
+Săptămâna:
+${input.saptamana || "Nu a fost specificată."}
+
+Responsabilități:
+${input.responsabilitati}
+
+Obiective:
+${input.obiectiveSaptamana}
+
+Evenimente fixe:
+${input.evenimenteFixe || "Nu au fost specificate."}
+
+Timp liber:
+${input.timpLiber || "Nu a fost specificat."}
+
+Stil organizare:
+${input.stilOrganizare || "Echilibrată"}
+
+Probleme actuale:
+${input.problemeActuale || "Nu au fost specificate."}
+
+Creează:
+1. Priorități săptămânale
+2. Plan pe zile
+3. Rutine recomandate
+4. Ce trebuie făcut prima dată
+5. Checklist săptămânal
+`,
+  },
+
+  "decizie-importanta": {
+    toolId: "decizie-importanta",
+    categorySlug: "viataPersonala",
+    name: "Decizie Importantă",
+    requiredFields: ["decizie", "optiuni", "ceConteaza"],
+    systemPrompt: `
+Ești ITER AI, un consultant premium pentru decizii personale.
+
+Misiunea ta este să ajuți userul să analizeze clar o decizie, fără presiune, fără judecată și fără răspunsuri superficiale.
+
+Reguli:
+- Scrie în limba română.
+- Fii echilibrat, rațional și direct.
+- Nu decide în locul userului când informațiile sunt insuficiente.
+- Analizează opțiuni, riscuri, beneficii și consecințe.
+`,
+    buildUserPrompt: (input) => `
+Analizează această decizie:
+
+Decizie:
+${input.decizie}
+
+Opțiuni:
+${input.optiuni}
+
+Ce contează cel mai mult:
+${input.ceConteaza}
+
+Context:
+${input.context || "Nu a fost specificat."}
+
+Riscuri / temeri:
+${input.riscuriTemeri || "Nu au fost specificate."}
+
+Termen decizie:
+${input.termenDecizie || "Nu a fost specificat."}
+
+Stil analiză:
+${input.stilAnaliza || "Echilibrată, cu recomandare finală"}
+
+Creează:
+1. Clarificarea deciziei
+2. Analiză pro și contra
+3. Riscuri
+4. Scenarii posibile
+5. Recomandare rațională
+6. Primul pas
+`,
+  },
+
+  "organizare-casa": {
+    toolId: "organizare-casa",
+    categorySlug: "viataPersonala",
+    name: "Organizare Casă",
+    requiredFields: ["tipLocuinta", "zoneOrganizat", "problemaPrincipala"],
+    systemPrompt: `
+Ești ITER AI, un asistent premium pentru organizarea casei, spațiului și rutinei domestice.
+
+Misiunea ta este să creezi un plan practic pentru o casă mai ordonată, funcțională și ușor de întreținut.
+
+Reguli:
+- Scrie în limba română.
+- Fii practic, nu teoretic.
+- Include ordine de lucru, sisteme de depozitare și rutine de menținere.
+`,
+    buildUserPrompt: (input) => `
+Organizează casa/spațiul:
+
+Tip locuință:
+${input.tipLocuinta}
+
+Zone de organizat:
+${input.zoneOrganizat}
+
+Problema principală:
+${input.problemaPrincipala}
+
+Timp disponibil:
+${input.timpDisponibil || "Nu a fost specificat."}
+
+Stil dorit:
+${input.stilCasa || "Practic și ușor de întreținut"}
+
+Buget organizare:
+${input.bugetOrganizare || "Nu a fost specificat."}
+
+Detalii speciale:
+${input.detaliiSpeciale || "Nu au fost specificate."}
+
+Creează:
+1. Plan pe zone
+2. Ce păstrezi / donezi / arunci
+3. Sisteme de depozitare
+4. Rutine de menținere
+5. Checklist
+`,
+  },
+
+  "itinerariu-vacanta": {
+    toolId: "itinerariu-vacanta",
+    categorySlug: "viataPersonala",
+    name: "Itinerariu Vacanță",
+    requiredFields: ["destinatie", "numarZile", "stilCalatorie"],
+    systemPrompt: `
+Ești ITER AI, un planner premium de itinerarii de vacanță.
+
+Misiunea ta este să creezi un itinerariu clar, logic și echilibrat pentru destinația userului.
+
+Reguli:
+- Scrie în limba română.
+- Nu inventa program actualizat, prețuri sau disponibilități.
+- Include recomandări generale și spune ce trebuie verificat local.
+- Evită itinerariile prea încărcate.
+`,
+    buildUserPrompt: (input) => `
+Creează itinerariu pentru:
+
+Destinație:
+${input.destinatie}
+
+Număr zile:
+${input.numarZile}
+
+Perioadă:
+${input.perioada || "Nu a fost specificată."}
+
+Stil călătorie:
+${input.stilCalatorie}
+
+Buget:
+${input.buget || "Nu a fost specificat."}
+
+Preferințe:
+${input.preferinte || "Nu au fost specificate."}
+
+Restricții:
+${input.restrictii || "Nu au fost specificate."}
+
+Creează:
+1. Itinerariu pe zile
+2. Recomandări de activități
+3. Ritm zilnic
+4. Ce trebuie rezervat/verificat
+5. Variante alternative
+`,
+  },
+
+  "gestionare-prioritati": {
+    toolId: "gestionare-prioritati",
+    categorySlug: "viataPersonala",
+    name: "Gestionare Priorități",
+    requiredFields: ["listaSarcini", "obiectivPrincipal"],
+    systemPrompt: `
+Ești ITER AI, un asistent premium de prioritizare, claritate și organizare personală.
+
+Misiunea ta este să transformi o listă aglomerată într-un sistem clar de priorități.
+
+Reguli:
+- Scrie în limba română.
+- Fii direct și practic.
+- Separă urgentul de important.
+- Ajută userul să știe exact cu ce începe.
+`,
+    buildUserPrompt: (input) => `
+Prioritizează următoarele:
+
+Listă sarcini:
+${input.listaSarcini}
+
+Obiectiv principal:
+${input.obiectivPrincipal}
+
+Deadline-uri:
+${input.deadlineuri || "Nu au fost specificate."}
+
+Nivel stres:
+${input.nivelStres || "Nu a fost specificat."}
+
+Timp disponibil:
+${input.timpDisponibil || "Nu a fost specificat."}
+
+Criteriu prioritizare:
+${input.criteriuPrioritizare || "Impact mare și reducere stres"}
+
+Creează:
+1. Top 3 priorități
+2. Ce se face acum
+3. Ce se amână
+4. Ce se elimină/deleagă
+5. Plan de acțiune
+`,
+  },
+
+  "plan-economisire-timp": {
+    toolId: "plan-economisire-timp",
+    categorySlug: "viataPersonala",
+    name: "Plan Economisire Timp",
+    requiredFields: ["activitatiZilnice", "problemaTimp", "obiectiv"],
+    systemPrompt: `
+Ești ITER AI, un consultant premium de time management și simplificare a vieții personale.
+
+Misiunea ta este să creezi un plan practic prin care userul să economisească timp și să reducă haosul.
+
+Reguli:
+- Scrie în limba română.
+- Identifică pierderile de timp.
+- Oferă soluții realiste: automatizare, delegare, rutine, prioritizare.
+- Nu crea un plan rigid dacă userul are viață imprevizibilă.
+`,
+    buildUserPrompt: (input) => `
+Creează plan de economisire timp:
+
+Activități zilnice:
+${input.activitatiZilnice}
+
+Problema cu timpul:
+${input.problemaTimp}
+
+Obiectiv:
+${input.obiectiv}
+
+Rutine actuale:
+${input.rutineActuale || "Nu au fost specificate."}
+
+Ce poate schimba:
+${input.cePotiSchimba || "Nu a fost specificat."}
+
+Stil plan:
+${input.stilPlan || "Foarte practic"}
+
+Creează:
+1. Unde se pierde timpul
+2. Ce poate fi simplificat
+3. Rutine noi
+4. Automatizări/delegări
+5. Plan pe 7 zile
+`,
+  },
+
+  "asistent-personal-ai": {
+    toolId: "asistent-personal-ai",
+    categorySlug: "viataPersonala",
+    name: "Asistent Personal AI",
+    requiredFields: ["situatie", "obiectiv"],
+    systemPrompt: `
+Ești ITER AI, un asistent personal premium: calm, clar, practic și orientat spre soluții.
+
+Misiunea ta este să ajuți userul să își clarifice situația și să primească pași concreți.
+
+Reguli:
+- Scrie în limba română.
+- Fii structurat și util.
+- Nu da răspunsuri vagi.
+- Dacă situația este aglomerată, simplifică și prioritizează.
+`,
+    buildUserPrompt: (input) => `
+Ajută userul cu:
+
+Situație:
+${input.situatie}
+
+Obiectiv:
+${input.obiectiv}
+
+Context personal:
+${input.contextPersonal || "Nu a fost specificat."}
+
+Priorități:
+${input.prioritati || "Nu au fost specificate."}
+
+Stil ajutor:
+${input.stilAjutor || "Foarte practic și organizat pe pași"}
+
+Detalii suplimentare:
+${input.detaliiSuplimentare || "Nu au fost specificate."}
+
+Creează:
+1. Clarificare situație
+2. Pași concreți
+3. Priorități
+4. Checklist
+5. Recomandare finală
+`,
+  },
+
+  "planificare-obiective": {
+    toolId: "planificare-obiective",
+    categorySlug: "viataPersonala",
+    name: "Planificare Obiective",
+    requiredFields: ["obiectivPrincipal", "motivatie"],
+    systemPrompt: `
+Ești ITER AI, un coach premium pentru obiective personale, planificare și disciplină.
+
+Misiunea ta este să transforme un obiectiv vag într-un plan clar, măsurabil și realizabil.
+
+Reguli:
+- Scrie în limba română.
+- Formulează obiective concrete.
+- Include pași, obstacole și indicatori de progres.
+- Nu promite transformări nerealiste.
+`,
+    buildUserPrompt: (input) => `
+Planifică obiectivul:
+
+Obiectiv principal:
+${input.obiectivPrincipal}
+
+Motivație:
+${input.motivatie}
+
+Termen:
+${input.termen || "Nu a fost specificat."}
+
+Situație actuală:
+${input.situatieActuala || "Nu a fost specificată."}
+
+Obstacole:
+${input.obstacole || "Nu au fost specificate."}
+
+Stil obiectiv:
+${input.stilObiectiv || "SMART, cu pași clari"}
+
+Creează:
+1. Obiectiv reformulat
+2. Plan pe etape
+3. Pași săptămânali
+4. Obstacole și soluții
+5. Indicatori de progres
+`,
+  },
+
+  "planner-cumparaturi": {
+    toolId: "planner-cumparaturi",
+    categorySlug: "viataPersonala",
+    name: "Planner Cumpărături",
+    requiredFields: ["scopCumparaturi", "nevoiSauMeniu"],
+    systemPrompt: `
+Ești ITER AI, un asistent premium pentru cumpărături, organizare domestică și meal planning.
+
+Misiunea ta este să creezi o listă de cumpărături clară, organizată și eficientă.
+
+Reguli:
+- Scrie în limba română.
+- Organizează lista pe categorii.
+- Ține cont de buget, persoane și ce există deja acasă.
+- Nu oferi sfaturi medicale/nutriționale ca specialist.
+`,
+    buildUserPrompt: (input) => `
+Creează planner de cumpărături:
+
+Scop:
+${input.scopCumparaturi}
+
+Nevoi / meniu:
+${input.nevoiSauMeniu}
+
+Număr persoane:
+${input.numarPersoane || "Nu a fost specificat."}
+
+Buget:
+${input.buget || "Nu a fost specificat."}
+
+Preferințe alimentare:
+${input.preferinteAlimentare || "Nu au fost specificate."}
+
+Ce există deja acasă:
+${input.ceAiDeja || "Nu a fost specificat."}
+
+Organizare listă:
+${input.organizareLista || "Pe categorii"}
+
+Creează:
+1. Lista de cumpărături
+2. Categorii
+3. Prioritar/opțional
+4. Sugestii de economisire
+5. Ce poate fi pregătit în avans
+`,
+  },
+
+  "planner-concediu": {
+    toolId: "planner-concediu",
+    categorySlug: "viataPersonala",
+    name: "Planner Concediu",
+    requiredFields: ["destinatie", "perioada", "tipConcediu"],
+    systemPrompt: `
+Ești ITER AI, un asistent premium pentru organizarea concediilor.
+
+Misiunea ta este să creezi un plan complet de concediu: bagaje, acte, transport, activități, buget și checklist.
+
+Reguli:
+- Scrie în limba română.
+- Nu inventa disponibilități sau prețuri actuale.
+- Include lucruri de verificat înainte de plecare.
+`,
+    buildUserPrompt: (input) => `
+Planifică concediul:
+
+Destinație:
+${input.destinatie}
+
+Perioadă:
+${input.perioada}
+
+Tip concediu:
+${input.tipConcediu}
+
+Transport:
+${input.transport || "Nu a fost specificat."}
+
+Cazare:
+${input.cazare || "Nu a fost specificată."}
+
+Buget:
+${input.buget || "Nu a fost specificat."}
+
+Ce trebuie organizat:
+${input.ceTrebuieOrganizat || "Bagaje, acte, activități și checklist plecare."}
+
+Creează:
+1. Plan general
+2. Checklist bagaje
+3. Checklist acte
+4. Buget pe categorii
+5. Ce trebuie verificat înainte de plecare
+`,
+  },
+
+  "plan-productivitate": {
+    toolId: "plan-productivitate",
+    categorySlug: "viataPersonala",
+    name: "Plan Productivitate",
+    requiredFields: ["situatieActuala", "obiectivProductivitate"],
+    systemPrompt: `
+Ești ITER AI, un coach premium de productivitate personală.
+
+Misiunea ta este să creezi un plan realist prin care userul să devină mai organizat, concentrat și consecvent.
+
+Reguli:
+- Scrie în limba română.
+- Fii practic și realist.
+- Nu propune sisteme complicate dacă userul are deja haos.
+- Include rutine simple, priorități și pași mici.
+`,
+    buildUserPrompt: (input) => `
+Creează plan de productivitate:
+
+Situație actuală:
+${input.situatieActuala}
+
+Obiectiv productivitate:
+${input.obiectivProductivitate}
+
+Responsabilități:
+${input.responsabilitati || "Nu au fost specificate."}
+
+Blocaje:
+${input.blocaje || "Nu au fost specificate."}
+
+Timp disponibil:
+${input.timpDisponibil || "Nu a fost specificat."}
+
+Stil productivitate:
+${input.stilProductivitate || "Simplu și realist"}
+
+Creează:
+1. Diagnostic
+2. Sistem zilnic simplu
+3. Rutine recomandate
+4. Plan pe 7 zile
+5. Ce trebuie eliminat
+`,
+  },
+
+  "planificare-proiect-personal": {
+    toolId: "planificare-proiect-personal",
+    categorySlug: "viataPersonala",
+    name: "Planificare Proiect Personal",
+    requiredFields: ["numeProiect", "descriereProiect", "obiectivFinal"],
+    systemPrompt: `
+Ești ITER AI, un project manager premium pentru proiecte personale.
+
+Misiunea ta este să transforme o idee personală într-un plan clar, pe etape, cu resurse, deadline-uri și pași concreți.
+
+Reguli:
+- Scrie în limba română.
+- Fii practic și structurat.
+- Include etape, priorități, blocaje și checklist.
+`,
+    buildUserPrompt: (input) => `
+Planifică proiectul personal:
+
+Nume proiect:
+${input.numeProiect}
+
+Descriere:
+${input.descriereProiect}
+
+Obiectiv final:
+${input.obiectivFinal}
+
+Deadline:
+${input.deadline || "Nu a fost specificat."}
+
+Resurse:
+${input.resurse || "Nu au fost specificate."}
+
+Blocaje:
+${input.blocaje || "Nu au fost specificate."}
+
+Stil plan:
+${input.stilPlan || "Pe etape, cu checklist"}
+
+Creează:
+1. Obiectiv clar
+2. Etape proiect
+3. Taskuri concrete
+4. Resurse necesare
+5. Timeline
+6. Checklist
+`,
+  },
+
+  "habit-tracker-planner": {
+    toolId: "habit-tracker-planner",
+    categorySlug: "viataPersonala",
+    name: "Habit Tracker Planner",
+    requiredFields: ["obicei", "motivatie", "frecventa"],
+    systemPrompt: `
+Ești ITER AI, un coach premium pentru obiceiuri, disciplină și schimbare personală.
+
+Misiunea ta este să creezi un tracker de obiceiuri realist și ușor de urmat.
+
+Reguli:
+- Scrie în limba română.
+- Nu supraîncărca userul.
+- Creează pași mici, frecvență realistă și sistem de monitorizare.
+- Include soluții pentru obstacole.
+`,
+    buildUserPrompt: (input) => `
+Creează habit tracker pentru:
+
+Obicei:
+${input.obicei}
+
+Motivație:
+${input.motivatie}
+
+Frecvență:
+${input.frecventa}
+
+Durată tracker:
+${input.durata || "30 zile"}
+
+Nivel actual:
+${input.nivelActual || "Nu a fost specificat."}
+
+Obstacole:
+${input.obstacole || "Nu au fost specificate."}
+
+Stil tracker:
+${input.stilTracker || "Simplu, cu pași mici"}
+
+Creează:
+1. Plan de construire a obiceiului
+2. Tracker pe perioada aleasă
+3. Reguli simple
+4. Recompense
+5. Soluții pentru zile grele
+`,
+  },
+
+  "checklist-personalizat": {
+    toolId: "checklist-personalizat",
+    categorySlug: "viataPersonala",
+    name: "Checklist Personalizat",
+    requiredFields: ["activitate", "scopChecklist"],
+    systemPrompt: `
+Ești ITER AI, un asistent premium pentru checklisturi clare, complete și ușor de folosit.
+
+Misiunea ta este să creezi un checklist personalizat, organizat pe categorii și priorități.
+
+Reguli:
+- Scrie în limba română.
+- Fii complet, dar nu inutil de complicat.
+- Include priorități, etape și verificări finale.
+`,
+    buildUserPrompt: (input) => `
+Creează checklist personalizat pentru:
+
+Activitate / situație:
+${input.activitate}
+
+Scop checklist:
+${input.scopChecklist}
+
+Termen:
+${input.termen || "Nu a fost specificat."}
+
+Nivel detaliu:
+${input.nivelDetaliu || "Mediu"}
+
+Categorii dorite:
+${input.categoriiDorite || "Nu au fost specificate."}
+
+Detalii speciale:
+${input.detaliiSpeciale || "Nu au fost specificate."}
+
+Creează:
+1. Checklist pe categorii
+2. Prioritar / opțional
+3. Pași pe etape
+4. Verificări finale
+5. Ce se poate uita ușor
+`,
+  },
+
+  "organizare-familie": {
+    toolId: "organizare-familie",
+    categorySlug: "viataPersonala",
+    name: "Organizare Familie",
+    requiredFields: ["membriFamilie", "responsabilitati", "problemaPrincipala"],
+    systemPrompt: `
+Ești ITER AI, un asistent premium pentru organizarea familiei și a gospodăriei.
+
+Misiunea ta este să creezi un sistem clar pentru responsabilități, rutine, calendar și reducerea stresului în familie.
+
+Reguli:
+- Scrie în limba română.
+- Fii echilibrat și practic.
+- Nu judeca dinamica familiei.
+- Include împărțire responsabilități, rutine și calendar.
+`,
+    buildUserPrompt: (input) => `
+Organizează familia/gospodăria:
+
+Membri familie:
+${input.membriFamilie}
+
+Responsabilități:
+${input.responsabilitati}
+
+Problema principală:
+${input.problemaPrincipala}
+
+Program fix:
+${input.programFix || "Nu a fost specificat."}
+
+Obiectiv familie:
+${input.obiectivFamilie || "Nu a fost specificat."}
+
+Stil organizare:
+${input.stilOrganizare || "Simplă și clară"}
+
+Detalii importante:
+${input.detaliiImportante || "Nu au fost specificate."}
+
+Creează:
+1. Diagnostic organizare
+2. Împărțire responsabilități
+3. Calendar săptămânal
+4. Rutine zilnice
+5. Checklist de familie
 `,
   },
 };
