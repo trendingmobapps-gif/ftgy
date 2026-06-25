@@ -267,6 +267,8 @@ export default async function handler(req, res) {
       const slugInstrument =
         (typeof t.slugInstrument === "string" && t.slugInstrument.trim()) ||
         toolId;
+      const toolSummary =
+        typeof t.toolSummary === "string" ? t.toolSummary.trim() : "";
       const description =
         typeof t.description === "string" ? t.description.trim() : "";
       // Benefits may arrive as a string or an array of strings.
@@ -279,13 +281,18 @@ export default async function handler(req, res) {
           .filter(Boolean)
           .join("; ");
       }
+      // Single source of truth for "what this tool does": prefer toolSummary,
+      // then fall back to description, then benefits.
+      const summary = toolSummary || description || benefits;
       return {
         toolId,
         toolName,
         categorySlug: slug,
         slugInstrument,
+        toolSummary,
         description,
         benefits,
+        summary,
       };
     })
     .filter(
@@ -392,9 +399,10 @@ export default async function handler(req, res) {
       normalizedTools.length > 0
         ? normalizedTools
             .map((t, i) => {
-              const desc = t.description ? `\n   Ce face: ${t.description}` : "";
-              const ben = t.benefits ? `\n   Beneficii: ${t.benefits}` : "";
-              return `${i + 1}. toolId: "${t.toolId}" | nume: "${t.toolName}"${desc}${ben}`;
+              // toolSummary is the primary descriptor (fallback: description,
+              // then benefits), resolved earlier into t.summary.
+              const sum = t.summary ? `\n   Ce face: ${t.summary}` : "";
+              return `${i + 1}. toolId: "${t.toolId}" | nume: "${t.toolName}"${sum}`;
             })
             .join("\n")
         : "(Nu există instrumente disponibile pentru recomandare în această categorie.)";
