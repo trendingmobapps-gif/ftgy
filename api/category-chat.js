@@ -110,6 +110,79 @@ function sanitizeFollowUpFields(raw) {
   return fields.length > 0 ? fields : null;
 }
 
+// Preferred chat models for category chat, strongest first. This endpoint is a
+// flagship feature, so it deliberately uses a stronger model than tool
+// generation. We try each in order and fall back when a model is unavailable on
+// the account (e.g. not yet released or not enabled).
+const CHAT_MODELS = ["gpt-5.5", "gpt-5.1", "gpt-5", "gpt-4.1"];
+
+// Newer GPT-5 family models only accept the default temperature, so we only send
+// a custom temperature for models that support it.
+function supportsCustomTemperature(model) {
+  return model.startsWith("gpt-4");
+}
+
+// Detects OpenAI errors that mean "this model is unavailable for this account",
+// which is when we should fall back to the next model rather than failing.
+function isModelUnavailableError(status, errText) {
+  if (status === 404) return true;
+  const t = String(errText || "").toLowerCase();
+  return (
+    t.includes("does not exist") ||
+    t.includes("do not have access") ||
+    t.includes("not have access") ||
+    t.includes("unknown model") ||
+    t.includes("invalid model") ||
+    t.includes("model_not_found") ||
+    t.includes("is not supported")
+  );
+}
+
+// Calls the chat completions API, trying CHAT_MODELS in order. Returns the first
+// successful response. Falls back to the next model only on availability errors;
+// other errors (auth, rate limit, etc.) stop the loop and are surfaced.
+async function callChatModel(messages, apiKey) {
+  let lastError = "";
+  for (const model of CHAT_MODELS) {
+    const body = {
+      model,
+      response_format: { type: "json_object" },
+      messages,
+    };
+    if (supportsCustomTemperature(model)) {
+      body.temperature = 0.7;
+    }
+
+    let openaiRes;
+    try {
+      openaiRes = await fetch("https://api.openai.com/v1/chat/completions", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${apiKey}`,
+        },
+        body: JSON.stringify(body),
+      });
+    } catch (e) {
+      lastError = e?.message || "network error";
+      continue;
+    }
+
+    if (openaiRes.ok) {
+      const data = await openaiRes.json();
+      return { data, model };
+    }
+
+    const errText = await openaiRes.text();
+    lastError = errText;
+    // Only fall back when the model itself is unavailable; otherwise stop.
+    if (!isModelUnavailableError(openaiRes.status, errText)) {
+      break;
+    }
+  }
+  return { data: null, error: lastError };
+}
+
 // Category-specific assistant behavior, welcome message, and follow-up hints.
 // `followUpHint` tells the model which kinds of structured questions make sense
 // for this category when the user's request is too vague to answer concretely.
@@ -541,33 +614,20 @@ toolId trebuie să fie identic cu unul din listă.`;
     }
     messages.push({ role: "user", content: finalUserContent });
 
-    const openaiRes = await fetch(
-      "https://api.openai.com/v1/chat/completions",
-      {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${apiKey}`,
-        },
-        body: JSON.stringify({
-          model: "gpt-4.1-mini",
-          temperature: 0.7,
-          response_format: { type: "json_object" },
-          messages,
-        }),
-      },
-    );
+    // Category chat is one of the most important features of ITER AI, so it uses
+    // a stronger model than standard tool generation. We try the strongest model
+    // first and fall back through progressively-available production models if a
+    // model is not available on this account.
+    const { data, error: chatError } = await callChatModel(messages, apiKey);
 
-    if (!openaiRes.ok) {
-      const errText = await openaiRes.text();
+    if (!data) {
       res.status(200).json({
         success: false,
-        message: `Eroare OpenAI: ${errText}`,
+        message: `Eroare OpenAI: ${chatError || "model indisponibil"}`,
       });
       return;
     }
 
-    const data = await openaiRes.json();
     const rawContent = data?.choices?.[0]?.message?.content?.trim();
 
     if (!rawContent) {
