@@ -114,7 +114,7 @@ function sanitizeFollowUpFields(raw) {
 // flagship feature, so it deliberately uses a stronger model than tool
 // generation. We try each in order and fall back when a model is unavailable on
 // the account (e.g. not yet released or not enabled).
-const CHAT_MODELS = ["gpt-5.5", "gpt-5.1", "gpt-5", "gpt-4.1"];
+const CHAT_MODELS = ["gpt-5.5", "gpt-5.3", "gpt-5.1", "gpt-5", "gpt-4.1"];
 
 // Newer GPT-5 family models only accept the default temperature, so we only send
 // a custom temperature for models that support it.
@@ -340,31 +340,32 @@ export default async function handler(req, res) {
       const slugInstrument =
         (typeof t.slugInstrument === "string" && t.slugInstrument.trim()) ||
         toolId;
+      // toolSummary is the single source of truth for "what this tool does".
+      // We fall back to description/benefits only if toolSummary is missing, so
+      // older payloads still work. Large/unnecessary CMS fields are dropped here
+      // to keep the model payload small and the response fast.
       const toolSummary =
         typeof t.toolSummary === "string" ? t.toolSummary.trim() : "";
-      const description =
-        typeof t.description === "string" ? t.description.trim() : "";
-      // Benefits may arrive as a string or an array of strings.
-      let benefits = "";
-      if (typeof t.benefits === "string") {
-        benefits = t.benefits.trim();
-      } else if (Array.isArray(t.benefits)) {
-        benefits = t.benefits
-          .map((b) => String(b).trim())
-          .filter(Boolean)
-          .join("; ");
+      let summary = toolSummary;
+      if (!summary && typeof t.description === "string") {
+        summary = t.description.trim();
       }
-      // Single source of truth for "what this tool does": prefer toolSummary,
-      // then fall back to description, then benefits.
-      const summary = toolSummary || description || benefits;
+      if (!summary) {
+        if (typeof t.benefits === "string") {
+          summary = t.benefits.trim();
+        } else if (Array.isArray(t.benefits)) {
+          summary = t.benefits
+            .map((b) => String(b).trim())
+            .filter(Boolean)
+            .join("; ");
+        }
+      }
+      // Keep ONLY the fields needed downstream (id, name, slug, summary).
       return {
         toolId,
         toolName,
         categorySlug: slug,
         slugInstrument,
-        toolSummary,
-        description,
-        benefits,
         summary,
       };
     })
@@ -604,9 +605,17 @@ Când ai nevoie de mai multe detalii, completează "followUpFields":
 
 toolId trebuie să fie identic cu unul din listă.`;
 
-    // Build the messages array: system prompt + prior conversation + new message.
+    // Build the messages array: system prompt + recent conversation + new
+    // message. To keep responses fast, we only send the last ~12 turns instead
+    // of the full history; older context rarely changes the answer but slows the
+    // request down significantly.
+    const MAX_HISTORY_TURNS = 12;
+    const recentConversation =
+      conversation.length > MAX_HISTORY_TURNS
+        ? conversation.slice(-MAX_HISTORY_TURNS)
+        : conversation;
     const messages = [{ role: "system", content: systemPrompt }];
-    for (const turn of conversation) {
+    for (const turn of recentConversation) {
       if (!turn || typeof turn !== "object") continue;
       const role = turn.role === "assistant" ? "assistant" : "user";
       const content = typeof turn.content === "string" ? turn.content : "";
