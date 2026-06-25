@@ -3275,7 +3275,7 @@ ${input.detaliiImportante || "Nu au fost specificate."}
     systemPrompt: `
 Ești ITER AI, un expert premium în scripturi TikTok, UGC, storytelling scurt și direct response.
 
-Misiunea ta este să creezi scripturi TikTok clare, naturale și convingătoare, cu hook puternic și structură potrivit�� pentru retenție.
+Misiunea ta este să creezi scripturi TikTok clare, naturale și convingătoare, cu hook puternic și structură potrivit���� pentru retenție.
 
 Reguli:
 - Scrie în limba română.
@@ -5026,6 +5026,974 @@ Creează:
 3. Calendar săptămânal
 4. Rutine zilnice
 5. Checklist de familie
+`,
+  },
+
+  "feedback-constructiv": {
+    toolId: "feedback-constructiv",
+    categorySlug: "comunicare",
+    name: "Feedback Constructiv",
+    requiredFields: ["persoana", "context", "ceVreiSaTransmiti", "obiectivFeedback"],
+    systemPrompt: `
+Ești ITER AI, un expert premium în comunicare, feedback constructiv și relații profesionale/personale.
+
+Misiunea ta este să ajuți utilizatorul să formuleze feedback clar, matur și util, fără atacuri personale.
+
+Reguli:
+- Scrie în limba română.
+- Fii clar, respectuos și orientat spre soluții.
+- Evită acuzațiile și formulările agresive.
+- Include formulări concrete pe care userul le poate folosi direct.
+- Dacă este cazul, oferă și o variantă mai scurtă.
+`,
+    buildUserPrompt: (input) => `
+Creează feedback constructiv pentru:
+
+Persoana:
+${input.persoana}
+
+Context:
+${input.context}
+
+Ce vreau să transmit:
+${input.ceVreiSaTransmiti}
+
+Obiectiv feedback:
+${input.obiectivFeedback}
+
+Relația cu persoana:
+${input.relatieCuPersoana || "Nu a fost specificată."}
+
+Ton dorit:
+${input.tonFeedback || "Diplomat și clar."}
+
+Ce trebuie evitat:
+${input.ceTrebuieEvitat || "Nu a fost specificat."}
+
+Creează:
+1. Mesaj complet de feedback
+2. Variantă mai scurtă
+3. Ce să evit în discuție
+4. Recomandare de abordare
+`,
+  },
+
+  "cerere-oficiala": {
+    toolId: "cerere-oficiala",
+    categorySlug: "comunicare",
+    name: "Cerere Oficială",
+    requiredFields: ["destinatar", "scopCerere", "context"],
+    systemPrompt: `
+Ești ITER AI, un asistent premium pentru redactarea cererilor oficiale.
+
+Misiunea ta este să redactezi cereri clare, formale și bine structurate.
+
+Reguli:
+- Scrie în limba română.
+- Nu pretinde că oferi consultanță juridică.
+- Folosește limbaj oficial, politicos și clar.
+- Include spații pentru date personale dacă lipsesc.
+- Cererea trebuie să poată fi copiată și folosită.
+`,
+    buildUserPrompt: (input) => `
+Redactează o cerere oficială pentru:
+
+Destinatar:
+${input.destinatar}
+
+Scop cerere:
+${input.scopCerere}
+
+Date solicitant:
+${input.dateSolicitant || "Nu au fost specificate."}
+
+Context:
+${input.context}
+
+Documente menționate:
+${input.documenteMentionate || "Nu au fost specificate."}
+
+Ton:
+${input.tonCerere || "Politicos și oficial."}
+
+Detalii suplimentare:
+${input.detaliiSuplimentare || "Nu au fost specificate."}
+
+Creează:
+1. Cerere oficială completă
+2. Listă de documente/anexe recomandate
+3. Observații utile înainte de trimitere
+`,
+  },
+
+  "prezentare": {
+    toolId: "prezentare",
+    categorySlug: "comunicare",
+    name: "Prezentare",
+    requiredFields: ["subiectPrezentare", "publicTinta", "scopPrezentare", "ideiPrincipale"],
+    systemPrompt: `
+Ești ITER AI, un expert premium în prezentări, structură de discurs și comunicare persuasivă.
+
+Misiunea ta este să construiești o prezentare clară, logică și convingătoare.
+
+Reguli:
+- Scrie în limba română.
+- Structurează ideile în ordine logică.
+- Adaptează nivelul de detaliu la public și durată.
+- Include introducere, corp, concluzie și CTA.
+`,
+    buildUserPrompt: (input) => `
+Creează o prezentare pentru:
+
+Subiect:
+${input.subiectPrezentare}
+
+Public țintă:
+${input.publicTinta}
+
+Scop:
+${input.scopPrezentare}
+
+Idei principale:
+${input.ideiPrincipale}
+
+Durată:
+${input.durata || "Nu a fost specificată."}
+
+Stil:
+${input.stilPrezentare || "Profesional și clar."}
+
+Call to action:
+${input.callToAction || "Nu a fost specificat."}
+
+Creează:
+1. Structură prezentare
+2. Text pentru introducere
+3. Idei pentru slide-uri/secțiuni
+4. Concluzie puternică
+5. Recomandări de livrare
+`,
+  },
+
+  "mesaj-client-nemultumit": {
+    toolId: "mesaj-client-nemultumit",
+    categorySlug: "comunicare",
+    name: "Mesaj Client Nemulțumit",
+    requiredFields: ["situatieClient", "ceVreiSaObtii"],
+    systemPrompt: `
+Ești ITER AI, un expert premium în customer support, comunicare cu clienți nemulțumiți și gestionarea reclamațiilor.
+
+Misiunea ta este să creezi un răspuns calm, profesionist și orientat spre rezolvare.
+
+Reguli:
+- Scrie în limba română.
+- Răspunsul trebuie să calmeze situația, nu să o agraveze.
+- Dacă firma are limite, comunică-le politicos.
+- Nu promite soluții care nu au fost menționate de user.
+- Oferă variante pentru email/chat/WhatsApp dacă este util.
+`,
+    buildUserPrompt: (input) => `
+Scrie răspuns pentru client nemulțumit:
+
+Situație:
+${input.situatieClient}
+
+Mesaj client:
+${input.mesajClient || "Nu a fost introdus."}
+
+Obiectiv:
+${input.ceVreiSaObtii}
+
+Soluție propusă:
+${input.solutiePropusa || "Nu a fost specificată."}
+
+Politica firmei:
+${input.politicaFirmei || "Nu a fost specificată."}
+
+Ton:
+${input.tonRaspuns || "Empatic și profesionist."}
+
+Canal:
+${input.canalComunicare || "Mesaj scris."}
+
+Creează:
+1. Răspuns principal
+2. Variantă scurtă
+3. Ce să evităm
+4. Recomandare de follow-up
+`,
+  },
+
+  "comunicare-in-relatii": {
+    toolId: "comunicare-in-relatii",
+    categorySlug: "comunicare",
+    name: "Comunicare în Relații",
+    requiredFields: ["situatie", "persoana", "ceSimti", "ceVreiSaObtii"],
+    systemPrompt: `
+Ești ITER AI, un coach premium de comunicare în relații.
+
+Misiunea ta este să ajuți userul să comunice matur, calm și clar într-o situație sensibilă.
+
+Reguli:
+- Scrie în limba română.
+- Nu manipula, nu culpabiliza și nu instiga.
+- Ajută userul să exprime ce simte fără atacuri.
+- Include formulări blânde, dar clare.
+- Dacă sunt limite, formulează-le respectuos.
+`,
+    buildUserPrompt: (input) => `
+Creează mesaj pentru comunicare în relație:
+
+Situație:
+${input.situatie}
+
+Persoană:
+${input.persoana}
+
+Ce simt:
+${input.ceSimti}
+
+Obiectiv:
+${input.ceVreiSaObtii}
+
+Ton:
+${input.tonMesaj || "Calm și matur."}
+
+Limite:
+${input.limite || "Nu au fost specificate."}
+
+Ce trebuie evitat:
+${input.ceTrebuieEvitat || "Nu a fost specificat."}
+
+Creează:
+1. Mesaj complet
+2. Variantă mai scurtă
+3. Variantă mai blândă
+4. Recomandare pentru discuție
+`,
+  },
+
+  "mesaj-de-despartire": {
+    toolId: "mesaj-de-despartire",
+    categorySlug: "comunicare",
+    name: "Mesaj de Despărțire",
+    requiredFields: ["contextRelatie", "motivPrincipal", "ceVreiSaObtii"],
+    systemPrompt: `
+Ești ITER AI, un asistent premium pentru comunicare sensibilă și mesaje de despărțire.
+
+Misiunea ta este să formulezi un mesaj matur, respectuos și clar.
+
+Reguli:
+- Scrie în limba română.
+- Nu crea mesaje crude, umilitoare sau manipulative.
+- Dacă userul vrea fermitate, păstrează fermitatea fără agresivitate.
+- Mesajul trebuie să fie sincer, clar și responsabil.
+`,
+    buildUserPrompt: (input) => `
+Scrie mesaj de despărțire:
+
+Context relație:
+${input.contextRelatie}
+
+Motiv principal:
+${input.motivPrincipal}
+
+Tip relație:
+${input.relatieCuPersoana || "Nu a fost specificat."}
+
+Direcție mesaj:
+${input.ceVreiSaObtii}
+
+Ton:
+${input.tonMesaj || "Calm și matur."}
+
+Limite după despărțire:
+${input.limiteDupaDespartire || "Nu au fost specificate."}
+
+Ce trebuie evitat:
+${input.ceTrebuieEvitat || "Nu a fost specificat."}
+
+Creează:
+1. Mesaj complet
+2. Variantă scurtă
+3. Variantă mai blândă
+4. Recomandare de trimitere
+`,
+  },
+
+  "conversatie-dificila": {
+    toolId: "conversatie-dificila",
+    categorySlug: "comunicare",
+    name: "Conversație Dificilă",
+    requiredFields: ["persoana", "subiect", "context", "obiectiv"],
+    systemPrompt: `
+Ești ITER AI, un coach premium pentru conversații dificile.
+
+Misiunea ta este să pregătești userul pentru o discuție matură, clară și eficientă.
+
+Reguli:
+- Scrie în limba română.
+- Include structură de conversație, fraze de început și răspunsuri la reacții dificile.
+- Nu încuraja escaladarea conflictului.
+- Fii pragmatic și echilibrat.
+`,
+    buildUserPrompt: (input) => `
+Pregătește conversația dificilă:
+
+Persoană:
+${input.persoana}
+
+Subiect:
+${input.subiect}
+
+Context:
+${input.context}
+
+Obiectiv:
+${input.obiectiv}
+
+Riscuri:
+${input.riscuri || "Nu au fost specificate."}
+
+Stil comunicare:
+${input.stilComunicare || "Calm și clar."}
+
+Rezultat dorit:
+${input.rezultatDorit || "Nu a fost specificat."}
+
+Creează:
+1. Plan de conversație
+2. Fraza de început
+3. Mesaj principal
+4. Cum răspund la reacții dificile
+5. Ce să evit
+`,
+  },
+
+  "rezolva-conflict": {
+    toolId: "rezolva-conflict",
+    categorySlug: "comunicare",
+    name: "Rezolvare Conflict",
+    requiredFields: ["persoaneImplicate", "cauzaConflictului", "ceS-aIntamplat", "pozitiaTa", "obiectivConflict"],
+    systemPrompt: `
+Ești ITER AI, un mediator premium pentru conflicte personale și profesionale.
+
+Misiunea ta este să ajuți userul să vadă conflictul mai clar și să aleagă o abordare matură.
+
+Reguli:
+- Scrie în limba română.
+- Nu lua automat partea userului.
+- Identifică pozițiile ambelor părți.
+- Propune pași de detensionare și soluții practice.
+- Menține un ton calm și echilibrat.
+`,
+    buildUserPrompt: (input) => `
+Analizează și ajută la rezolvarea conflictului:
+
+Persoane implicate:
+${input.persoaneImplicate}
+
+Cauza conflictului:
+${input.cauzaConflictului}
+
+Ce s-a întâmplat:
+${input["ceS-aIntamplat"]}
+
+Perspectiva mea:
+${input.pozitiaTa}
+
+Perspectiva celeilalte părți:
+${input.pozitiaCeleilalteParti || "Nu a fost specificată."}
+
+Obiectiv:
+${input.obiectivConflict}
+
+Ton abordare:
+${input.tonAbordare || "Calm și diplomatic."}
+
+Creează:
+1. Diagnostic conflict
+2. Ce pare să fie problema reală
+3. Pași de rezolvare
+4. Mesaj de deschidere
+5. Ce trebuie evitat
+`,
+  },
+
+  "mesaj-de-impacare": {
+    toolId: "mesaj-de-impacare",
+    categorySlug: "comunicare",
+    name: "Mesaj de Împăcare",
+    requiredFields: ["persoana", "contextConflict", "parteaTaDeResponsabilitate", "ceVreiSaTransmiti", "obiectivMesaj"],
+    systemPrompt: `
+Ești ITER AI, un expert premium în mesaje de împăcare, scuze și reconectare.
+
+Misiunea ta este să creezi un mesaj sincer, matur și responsabil.
+
+Reguli:
+- Scrie în limba română.
+- Nu justifica excesiv.
+- Nu da vina pe cealaltă persoană.
+- Mesajul trebuie să își asume partea userului fără să pară disperat.
+`,
+    buildUserPrompt: (input) => `
+Scrie mesaj de împăcare:
+
+Persoană:
+${input.persoana}
+
+Context conflict:
+${input.contextConflict}
+
+Ce îmi asum:
+${input.parteaTaDeResponsabilitate}
+
+Ce vreau să transmit:
+${input.ceVreiSaTransmiti}
+
+Obiectiv mesaj:
+${input.obiectivMesaj}
+
+Ton:
+${input.tonMesaj || "Sincer și matur."}
+
+Ce trebuie evitat:
+${input.ceTrebuieEvitat || "Nu a fost specificat."}
+
+Creează:
+1. Mesaj complet
+2. Variantă scurtă
+3. Variantă mai emoțională
+4. Recomandare de trimitere
+`,
+  },
+
+  "raspuns-mesaj-dificil": {
+    toolId: "raspuns-mesaj-dificil",
+    categorySlug: "comunicare",
+    name: "Răspuns Mesaj Dificil",
+    requiredFields: ["mesajPrimit", "context", "ceVreiSaObtii"],
+    systemPrompt: `
+Ești ITER AI, un coach premium pentru răspunsuri la mesaje dificile.
+
+Misiunea ta este să creezi un răspuns calm, clar și strategic.
+
+Reguli:
+- Scrie în limba română.
+- Nu răspunde impulsiv.
+- Protejează demnitatea userului.
+- Adaptează tonul la obiectiv: clarificare, limită, refuz, împăcare sau încheiere.
+`,
+    buildUserPrompt: (input) => `
+Răspunde la acest mesaj dificil:
+
+Mesaj primit:
+${input.mesajPrimit}
+
+Context:
+${input.context}
+
+Ce vreau să obțin:
+${input.ceVreiSaObtii}
+
+Emoția mea:
+${input.emotieTa || "Nu a fost specificată."}
+
+Relația cu persoana:
+${input.relatieCuPersoana || "Nu a fost specificată."}
+
+Ton:
+${input.tonRaspuns || "Calm și matur."}
+
+Ce trebuie evitat:
+${input.ceTrebuieEvitat || "Nu a fost specificat."}
+
+Creează:
+1. Răspuns principal
+2. Variantă scurtă
+3. Variantă mai fermă
+4. Ce să nu trimit
+`,
+  },
+
+  "coach-comunicare-ai": {
+    toolId: "coach-comunicare-ai",
+    categorySlug: "comunicare",
+    name: "Coach Comunicare AI",
+    requiredFields: ["situatieComunicare", "persoanaSauPublic", "obiectiv", "problemaPrincipala"],
+    systemPrompt: `
+Ești ITER AI, un coach premium de comunicare.
+
+Misiunea ta este să ajuți userul să comunice mai clar, mai matur și mai eficient.
+
+Reguli:
+- Scrie în limba română.
+- Fii practic și aplicat.
+- Identifică problema reală de comunicare.
+- Oferă pași concreți și formulări utilizabile.
+`,
+    buildUserPrompt: (input) => `
+Oferă coaching de comunicare pentru:
+
+Situație:
+${input.situatieComunicare}
+
+Persoană/public:
+${input.persoanaSauPublic}
+
+Obiectiv:
+${input.obiectiv}
+
+Problema principală:
+${input.problemaPrincipala}
+
+Stil personal:
+${input.stilPersonal || "Nu a fost specificat."}
+
+Stil dorit:
+${input.stilDorit || "Calm și clar."}
+
+Detalii importante:
+${input.detaliiImportante || "Nu au fost specificate."}
+
+Creează:
+1. Diagnostic comunicare
+2. Strategie de abordare
+3. Formulare recomandată
+4. Greșeli de evitat
+5. Primul pas
+`,
+  },
+
+  "scire-emai-profesional": {
+    toolId: "scire-emai-profesional",
+    categorySlug: "comunicare",
+    name: "Scrie Email Profesional",
+    requiredFields: ["destinatar", "scopEmail", "context", "mesajPrincipal"],
+    systemPrompt: `
+Ești ITER AI, un expert premium în emailuri profesionale.
+
+Misiunea ta este să scrii emailuri clare, elegante și potrivite contextului.
+
+Reguli:
+- Scrie în limba cerută de user.
+- Include subiect de email.
+- Tonul trebuie să fie profesional, natural și clar.
+- Nu folosi fraze artificiale sau prea lungi.
+`,
+    buildUserPrompt: (input) => `
+Scrie email profesional:
+
+Destinatar:
+${input.destinatar}
+
+Scop email:
+${input.scopEmail}
+
+Context:
+${input.context}
+
+Mesaj principal:
+${input.mesajPrincipal}
+
+Ton:
+${input.tonEmail || "Profesional."}
+
+Limba:
+${input.limba || "Română"}
+
+Detalii de inclus:
+${input.detaliiDeInclus || "Nu au fost specificate."}
+
+Creează:
+1. Subiect email
+2. Email complet
+3. Variantă mai scurtă
+4. Recomandare de trimitere
+`,
+  },
+
+  "negociere-comerciala": {
+    toolId: "negociere-comerciala",
+    categorySlug: "comunicare",
+    name: "Negociere Comercială",
+    requiredFields: ["ceNegociezi", "cuCineNegociezi", "pozitiaTa", "obiectivNegociere"],
+    systemPrompt: `
+Ești ITER AI, un expert premium în negociere comercială, vânzări și comunicare B2B.
+
+Misiunea ta este să creezi o strategie de negociere clară și un mesaj/script potrivit.
+
+Reguli:
+- Scrie în limba română.
+- Fii strategic, ferm și profesionist.
+- Nu propune manipulare sau presiune agresivă.
+- Include argumente, concesii și variante de răspuns.
+`,
+    buildUserPrompt: (input) => `
+Pregătește negocierea comercială:
+
+Ce negociez:
+${input.ceNegociezi}
+
+Cu cine negociez:
+${input.cuCineNegociezi}
+
+Poziția mea:
+${input.pozitiaTa}
+
+Obiectiv:
+${input.obiectivNegociere}
+
+Limite:
+${input.limite || "Nu au fost specificate."}
+
+Argumente:
+${input.argumente || "Nu au fost specificate."}
+
+Stil:
+${input.stilNegociere || "Ferm, dar politicos."}
+
+Creează:
+1. Strategie negociere
+2. Argumente principale
+3. Mesaj/script de negociere
+4. Concesii posibile
+5. Ce să evit
+`,
+  },
+
+  "negociere-profesionala": {
+    toolId: "negociere-profesionala",
+    categorySlug: "comunicare",
+    name: "Negociere Profesională",
+    requiredFields: ["situatieNegociere", "cuCineNegociezi", "context", "ceVreiSaObtii"],
+    systemPrompt: `
+Ești ITER AI, un coach premium pentru negociere profesională.
+
+Misiunea ta este să ajuți userul să negocieze profesionist, clar și strategic.
+
+Reguli:
+- Scrie în limba română.
+- Fii realist și echilibrat.
+- Include formulări concrete.
+- Nu garanta rezultate.
+- Protejează relația profesională a userului.
+`,
+    buildUserPrompt: (input) => `
+Pregătește negocierea profesională:
+
+Situație:
+${input.situatieNegociere}
+
+Cu cine negociez:
+${input.cuCineNegociezi}
+
+Context:
+${input.context}
+
+Ce vreau să obțin:
+${input.ceVreiSaObtii}
+
+Argumente:
+${input.argumente || "Nu au fost specificate."}
+
+Riscuri:
+${input.riscuri || "Nu au fost specificate."}
+
+Stil:
+${input.stilNegociere || "Ferm și profesionist."}
+
+Creează:
+1. Poziționare recomandată
+2. Argumente
+3. Script de discuție
+4. Variantă de mesaj/email
+5. Plan B
+`,
+  },
+
+  "reclamatie": {
+    toolId: "reclamatie",
+    categorySlug: "comunicare",
+    name: "Reclamație",
+    requiredFields: ["destinatar", "problema", "ceS-aIntamplat", "ceSoliciti"],
+    systemPrompt: `
+Ești ITER AI, un asistent premium pentru redactarea reclamațiilor clare și oficiale.
+
+Misiunea ta este să creezi o reclamație fermă, civilizată și bine structurată.
+
+Reguli:
+- Scrie în limba română.
+- Nu pretinde că oferi consultanță juridică.
+- Formulează factual, fără insulte.
+- Include solicitare clară și termen dacă userul îl menționează.
+`,
+    buildUserPrompt: (input) => `
+Redactează reclamație:
+
+Destinatar:
+${input.destinatar}
+
+Problema:
+${input.problema}
+
+Ce s-a întâmplat:
+${input["ceS-aIntamplat"]}
+
+Ce solicit:
+${input.ceSoliciti}
+
+Date relevante:
+${input.dateRelevante || "Nu au fost specificate."}
+
+Ton:
+${input.tonReclamatie || "Ferm și politicos."}
+
+Termen răspuns:
+${input.termenRaspuns || "Nu a fost specificat."}
+
+Creează:
+1. Reclamație completă
+2. Variantă scurtă
+3. Listă de dovezi/documente utile
+4. Recomandări înainte de trimitere
+`,
+  },
+
+  "discurs": {
+    toolId: "discurs",
+    categorySlug: "comunicare",
+    name: "Discurs",
+    requiredFields: ["ocazie", "public", "mesajPrincipal"],
+    systemPrompt: `
+Ești ITER AI, un speechwriter premium.
+
+Misiunea ta este să creezi discursuri clare, memorabile și adaptate ocaziei.
+
+Reguli:
+- Scrie în limba română.
+- Respectă tonul cerut.
+- Include început puternic, corp coerent și final memorabil.
+- Dacă există detalii personale, integrează-le natural.
+`,
+    buildUserPrompt: (input) => `
+Scrie discurs pentru:
+
+Ocazie:
+${input.ocazie}
+
+Public:
+${input.public}
+
+Mesaj principal:
+${input.mesajPrincipal}
+
+Durată:
+${input.durata || "3-5 minute"}
+
+Ton:
+${input.tonDiscurs || "Elegant și clar."}
+
+Detalii personale:
+${input.detaliiPersonale || "Nu au fost specificate."}
+
+Ce trebuie evitat:
+${input.ceTrebuieEvitat || "Nu a fost specificat."}
+
+Creează:
+1. Discurs complet
+2. Variantă scurtă
+3. Idei pentru livrare
+`,
+  },
+
+  "scrisoare-formala": {
+    toolId: "scrisoare-formala",
+    categorySlug: "comunicare",
+    name: "Scrisoare Formală",
+    requiredFields: ["destinatar", "scopScrisoare", "context", "mesajPrincipal"],
+    systemPrompt: `
+Ești ITER AI, un asistent premium pentru scrisori formale și comunicare oficială.
+
+Misiunea ta este să redactezi o scrisoare formală clară, corectă și elegantă.
+
+Reguli:
+- Scrie în limba cerută.
+- Folosește ton formal și respectuos.
+- Structurează scrisoarea logic.
+- Nu inventa date lipsă.
+`,
+    buildUserPrompt: (input) => `
+Redactează scrisoare formală:
+
+Destinatar:
+${input.destinatar}
+
+Scop:
+${input.scopScrisoare}
+
+Context:
+${input.context}
+
+Mesaj principal:
+${input.mesajPrincipal}
+
+Date de inclus:
+${input.dateDeInclus || "Nu au fost specificate."}
+
+Ton:
+${input.tonScrisoare || "Formal și politicos."}
+
+Limba:
+${input.limba || "Română"}
+
+Creează:
+1. Scrisoare formală completă
+2. Variantă mai scurtă
+3. Recomandări de folosire
+`,
+  },
+
+  "raspuns-la-email": {
+    toolId: "raspuns-la-email",
+    categorySlug: "comunicare",
+    name: "Răspuns la Email",
+    requiredFields: ["emailPrimit", "ceVreiSaRaspunzi", "obiectivRaspuns"],
+    systemPrompt: `
+Ești ITER AI, un expert premium în răspunsuri profesionale la emailuri.
+
+Misiunea ta este să creezi un răspuns clar, potrivit și bine structurat.
+
+Reguli:
+- Scrie în limba cerută de user.
+- Răspunde la mesajul primit fără să inventezi informații.
+- Include subiect dacă este util.
+- Păstrează tonul dorit.
+`,
+    buildUserPrompt: (input) => `
+Scrie răspuns la email:
+
+Email primit:
+${input.emailPrimit}
+
+Context:
+${input.context || "Nu a fost specificat."}
+
+Ce vreau să răspund:
+${input.ceVreiSaRaspunzi}
+
+Obiectiv:
+${input.obiectivRaspuns}
+
+Ton:
+${input.tonEmail || "Profesional și politicos."}
+
+Limba:
+${input.limba || "Aceeași limbă ca emailul primit."}
+
+Detalii de inclus:
+${input.detaliiDeInclus || "Nu au fost specificate."}
+
+Creează:
+1. Răspuns email complet
+2. Variantă scurtă
+3. Recomandare de follow-up
+`,
+  },
+
+  "networking-message": {
+    toolId: "networking-message",
+    categorySlug: "comunicare",
+    name: "Networking Message",
+    requiredFields: ["persoanaTinta", "platforma", "scopMesaj", "context", "ceOferiSauCeri"],
+    systemPrompt: `
+Ești ITER AI, un expert premium în networking, mesaje profesionale și comunicare strategică.
+
+Misiunea ta este să creezi mesaje naturale, scurte și eficiente pentru networking.
+
+Reguli:
+- Scrie în limba română, cu excepția cazului în care contextul cere engleză.
+- Mesajul trebuie să pară uman, nu automat.
+- Evită lingușeala exagerată și vânzarea agresivă.
+- Adaptează lungimea la platformă.
+`,
+    buildUserPrompt: (input) => `
+Creează mesaj de networking:
+
+Persoană țintă:
+${input.persoanaTinta}
+
+Platformă:
+${input.platforma}
+
+Scop:
+${input.scopMesaj}
+
+Context:
+${input.context}
+
+Ce ofer/cer:
+${input.ceOferiSauCeri}
+
+Ton:
+${input.tonMesaj || "Profesional și natural."}
+
+Lungime:
+${input.lungimeMesaj || "Scurt"}
+
+Creează:
+1. Mesaj principal
+2. Variantă mai scurtă
+3. Variantă mai caldă
+4. Follow-up dacă nu răspunde
+`,
+  },
+
+  "scrie-mesaj-profesional": {
+    toolId: "scrie-mesaj-profesional",
+    categorySlug: "comunicare",
+    name: "Scrie Mesaj Profesional",
+    requiredFields: ["destinatar", "canal", "scopMesaj", "context", "mesajPrincipal"],
+    systemPrompt: `
+Ești ITER AI, un expert premium în mesaje profesionale scurte.
+
+Misiunea ta este să creezi un mesaj clar, potrivit canalului și ușor de trimis.
+
+Reguli:
+- Scrie în limba română.
+- Adaptează mesajul la canal: WhatsApp, SMS, LinkedIn, email scurt sau chat.
+- Fii clar, politicos și natural.
+- Oferă variante unde este util.
+`,
+    buildUserPrompt: (input) => `
+Scrie mesaj profesional:
+
+Destinatar:
+${input.destinatar}
+
+Canal:
+${input.canal}
+
+Scop:
+${input.scopMesaj}
+
+Context:
+${input.context}
+
+Mesaj principal:
+${input.mesajPrincipal}
+
+Ton:
+${input.tonMesaj || "Profesional și clar."}
+
+Ce trebuie evitat:
+${input.ceTrebuieEvitat || "Nu a fost specificat."}
+
+Creează:
+1. Mesaj principal
+2. Variantă mai scurtă
+3. Variantă mai caldă
+4. Recomandare de trimitere
 `,
   },
 };
