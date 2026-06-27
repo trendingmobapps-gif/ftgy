@@ -28,6 +28,83 @@ const MAX_FILE_SIZE = 10 * 1024 * 1024;
 // blow past the model context window.
 const MAX_EXTRACTED_CHARS = 40000;
 
+// Preferred models for tool generation, strongest first. We intentionally use a
+// strong (but not the most expensive reasoning) model to improve output quality,
+// and fall back when a model is unavailable on the account.
+const TOOL_GEN_MODELS = ["gpt-5", "gpt-5.1", "gpt-4.1"];
+
+// Newer GPT-5 family models only accept the default temperature/top_p and use
+// `max_completion_tokens`, while gpt-4 models use `temperature`/`top_p`/`max_tokens`.
+function supportsLegacySamplingParams(model) {
+  return model.startsWith("gpt-4");
+}
+
+// Detects OpenAI errors that mean "this model is unavailable for this account",
+// so we fall back to the next model instead of failing the request.
+function isModelUnavailableError(status, errText) {
+  if (status === 404) return true;
+  const t = String(errText || "").toLowerCase();
+  return (
+    t.includes("does not exist") ||
+    t.includes("do not have access") ||
+    t.includes("not have access") ||
+    t.includes("unknown model") ||
+    t.includes("invalid model") ||
+    t.includes("model_not_found") ||
+    t.includes("is not supported")
+  );
+}
+
+// Calls the chat completions API, trying TOOL_GEN_MODELS in order. Falls back to
+// the next model only on availability errors; other errors stop the loop and are
+// surfaced. Returns { data } on success or { error } on failure.
+async function callToolModel({ systemPrompt, userPrompt, apiKey }) {
+  let lastError = "";
+  for (const model of TOOL_GEN_MODELS) {
+    const body = {
+      model,
+      messages: [
+        { role: "system", content: systemPrompt },
+        { role: "user", content: userPrompt },
+      ],
+    };
+    if (supportsLegacySamplingParams(model)) {
+      body.temperature = 0.35;
+      body.top_p = 0.9;
+      body.max_tokens = 1800;
+    } else {
+      body.max_completion_tokens = 1800;
+    }
+
+    let openaiRes;
+    try {
+      openaiRes = await fetch("https://api.openai.com/v1/chat/completions", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${apiKey}`,
+        },
+        body: JSON.stringify(body),
+      });
+    } catch (e) {
+      lastError = e?.message || "network error";
+      continue;
+    }
+
+    if (openaiRes.ok) {
+      const data = await openaiRes.json();
+      return { data };
+    }
+
+    const errText = await openaiRes.text();
+    lastError = errText;
+    if (!isModelUnavailableError(openaiRes.status, errText)) {
+      break;
+    }
+  }
+  return { error: lastError };
+}
+
 // Generic message when a file exists but cannot be read/parsed.
 const FILE_UNREADABLE_MESSAGE =
   "Fișierul nu a putut fi citit. Încearcă alt document sau copiază textul manual.";
@@ -654,34 +731,20 @@ Instrucțiuni de formatare:
 - Nu menționa Markdown.`;
 
   try {
-    const openaiRes = await fetch("https://api.openai.com/v1/chat/completions", {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        Authorization: `Bearer ${apiKey}`,
-      },
-      body: JSON.stringify({
-        model: "gpt-4.1-mini",
-        temperature: 0.35,
-        top_p: 0.9,
-        max_tokens: 1800,
-        messages: [
-          { role: "system", content: tool.systemPrompt.trim() },
-          { role: "user", content: userPrompt },
-        ],
-      }),
+    const { data, error: modelError } = await callToolModel({
+      systemPrompt: tool.systemPrompt.trim(),
+      userPrompt,
+      apiKey,
     });
 
-    if (!openaiRes.ok) {
-      const errText = await openaiRes.text();
+    if (!data) {
       res.status(200).json({
         success: false,
-        message: `OpenAI error: ${errText}`,
+        message: `OpenAI error: ${modelError || "model unavailable"}`,
       });
       return;
     }
 
-    const data = await openaiRes.json();
     const result = data?.choices?.[0]?.message?.content?.trim() || "";
 
     if (!result) {
