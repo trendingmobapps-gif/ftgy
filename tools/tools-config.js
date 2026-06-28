@@ -3275,7 +3275,7 @@ ${input.detaliiImportante || "Nu au fost specificate."}
     systemPrompt: `
 Ești ITER AI, un expert premium în scripturi TikTok, UGC, storytelling scurt și direct response.
 
-Misiunea ta este să creezi scripturi TikTok clare, naturale și convingătoare, cu hook puternic și structură potrivit������ pentru retenție.
+Misiunea ta este să creezi scripturi TikTok clare, naturale și convingătoare, cu hook puternic și structură potrivit�������� pentru retenție.
 
 Reguli:
 - Scrie în limba română.
@@ -6989,6 +6989,1049 @@ Creează:
 4. Plan pe 3-6 luni
 5. Riscuri
 6. Recomandarea ITER
+`,
+  },
+
+  "program-incepatori": {
+    toolId: "program-incepatori",
+    categorySlug: "fitness",
+    name: "Program Începători",
+    requiredFields: ["obiectivPrincipal", "nivelActual", "zilePeSaptamana", "locAntrenament"],
+    systemPrompt: `
+Ești ITER AI, un antrenor personal premium pentru începători.
+
+Misiunea ta este să creezi programe simple, sigure și realiste pentru persoane care încep fitnessul sau revin după pauză.
+
+Reguli:
+- Scrie în limba română.
+- Prioritizează siguranța, tehnica și progresul treptat.
+- Nu crea programe extreme.
+- Adaptează exercițiile la locație, echipament, timp și limitări.
+- Dacă userul menționează dureri sau accidentări, recomandă consult medical/fizioterapie înainte de exerciții solicitante.
+`,
+    buildUserPrompt: (input) => `
+Creează un program pentru începători:
+
+Obiectiv principal:
+${input.obiectivPrincipal}
+
+Nivel actual:
+${input.nivelActual}
+
+Zile pe săptămână:
+${input.zilePeSaptamana}
+
+Loc antrenament:
+${input.locAntrenament}
+
+Echipament disponibil:
+${input.echipamentDisponibil || "Nu a fost specificat."}
+
+Timp per antrenament:
+${input.timpPerAntrenament || "Nu a fost specificat."}
+
+Limitări / accidentări:
+${input.limitariSauAccidentari || "Nu au fost specificate."}
+
+Detalii personale:
+${input.detaliiPersonale || "Nu au fost specificate."}
+
+Creează:
+1. Program săptămânal
+2. Exerciții pe zile
+3. Seturi și repetări
+4. Încălzire și stretching
+5. Reguli de progres
+6. Greșeli de evitat
+`,
+  },
+
+  "analiza-alimentatie": {
+    toolId: "analiza-alimentatie",
+    categorySlug: "fitness",
+    name: "Analiză Alimentație",
+    requiredFields: ["obiectivAlimentatie", "ceMananciAcum", "problemaPrincipala"],
+    systemPrompt: `
+Ești ITER AI, un coach premium de nutriție orientativă pentru fitness.
+
+Misiunea ta este să analizezi alimentația userului și să oferi recomandări practice, sigure și sustenabile.
+
+Reguli:
+- Scrie în limba română.
+- Nu oferi diagnostic medical sau tratament.
+- Nu recomanda diete extreme.
+- Fii direct, dar constructiv.
+- Recomandările trebuie să fie ușor de aplicat.
+`,
+    buildUserPrompt: (input) => `
+Analizează alimentația:
+
+Obiectiv:
+${input.obiectivAlimentatie}
+
+Ce mănâncă acum:
+${input.ceMananciAcum}
+
+Program mese:
+${input.programMese || "Nu a fost specificat."}
+
+Date corporale:
+${input.dateCorporale || "Nu au fost specificate."}
+
+Preferințe alimentare:
+${input.preferinteAlimentare || "Nu au fost specificate."}
+
+Restricții:
+${input.restrictii || "Nu au fost specificate."}
+
+Problema principală:
+${input.problemaPrincipala}
+
+Stil analiză:
+${input.stilAnaliza || "Blândă și practică."}
+
+Creează:
+1. Diagnostic alimentar
+2. Ce este bine acum
+3. Ce trebuie îmbunătățit
+4. Recomandări concrete
+5. Exemplu de zi alimentară mai bună
+6. Primii 3 pași
+`,
+  },
+
+  "program-avansati": {
+    toolId: "program-avansati",
+    categorySlug: "fitness",
+    name: "Program Avansați",
+    requiredFields: ["obiectivPrincipal", "nivelExperienta", "zilePeSaptamana"],
+    systemPrompt: `
+Ești ITER AI, un antrenor premium pentru sportivi intermediari și avansați.
+
+Misiunea ta este să creezi programe structurate, eficiente și adaptate obiectivului: hipertrofie, forță, definire sau performanță.
+
+Reguli:
+- Scrie în limba română.
+- Include progresie, volum, intensitate și recuperare.
+- Nu recomanda exerciții riscante dacă userul are limitări.
+- Adaptează programul la timpul disponibil și punctele slabe.
+`,
+    buildUserPrompt: (input) => `
+Creează program avansat:
+
+Obiectiv principal:
+${input.obiectivPrincipal}
+
+Nivel experiență:
+${input.nivelExperienta}
+
+Zile pe săptămână:
+${input.zilePeSaptamana}
+
+Split preferat:
+${input.splitPreferat || "Nu a fost specificat."}
+
+Exerciții preferate/de evitat:
+${input.exercitiiPreferate || "Nu au fost specificate."}
+
+Puncte slabe:
+${input.puncteSlabe || "Nu au fost specificate."}
+
+Timp per antrenament:
+${input.timpPerAntrenament || "Nu a fost specificat."}
+
+Limitări / accidentări:
+${input.limitariSauAccidentari || "Nu au fost specificate."}
+
+Creează:
+1. Structură program
+2. Program pe zile
+3. Exerciții, seturi, repetări
+4. Reguli de progresie
+5. Recuperare
+6. Observații tehnice
+`,
+  },
+
+  "calculator-macronutrienti": {
+    toolId: "calculator-macronutrienti",
+    categorySlug: "fitness",
+    name: "Calculator Macronutrienți",
+    requiredFields: ["sex", "varsta", "inaltime", "greutate", "nivelActivitate", "obiectiv"],
+    systemPrompt: `
+Ești ITER AI, un calculator premium de calorii și macronutrienți pentru fitness.
+
+Misiunea ta este să estimezi caloriile și macronutrienții potriviți obiectivului userului.
+
+Reguli:
+- Scrie în limba română.
+- Rezultatele sunt estimative, nu diagnostic medical.
+- Explică simplu logica calculului.
+- Oferă proteine, carbohidrați și grăsimi în grame.
+- Nu propune diete extreme.
+`,
+    buildUserPrompt: (input) => `
+Calculează macronutrienții pentru:
+
+Sex:
+${input.sex}
+
+Vârstă:
+${input.varsta}
+
+Înălțime:
+${input.inaltime}
+
+Greutate:
+${input.greutate}
+
+Nivel activitate:
+${input.nivelActivitate}
+
+Obiectiv:
+${input.obiectiv}
+
+Preferință proteină:
+${input.preferintaProteina || "Standard"}
+
+Restricții alimentare:
+${input.restrictiiAlimentare || "Nu au fost specificate."}
+
+Creează:
+1. Calorii estimate
+2. Proteine, carbohidrați, grăsimi
+3. Explicație simplă
+4. Recomandări pentru ajustare
+5. Exemplu de împărțire pe mese
+`,
+  },
+
+  "plan-slabire": {
+    toolId: "plan-slabire",
+    categorySlug: "fitness",
+    name: "Plan Slăbire",
+    requiredFields: ["greutateActuala", "greutateDorita", "inaltimeVarstaSex", "nivelActivitate", "alimentatieActuala"],
+    systemPrompt: `
+Ești ITER AI, un coach premium pentru slăbire sustenabilă.
+
+Misiunea ta este să creezi un plan realist de slăbire bazat pe alimentație, mișcare, obiceiuri și progres gradual.
+
+Reguli:
+- Scrie în limba română.
+- Nu recomanda slăbire extremă sau metode nesănătoase.
+- Pune accent pe deficit caloric realist, proteine, pași, antrenamente și aderență.
+- Dacă există probleme medicale, recomandă specialist.
+`,
+    buildUserPrompt: (input) => `
+Creează plan de slăbire:
+
+Greutate actuală:
+${input.greutateActuala}
+
+Greutate / rezultat dorit:
+${input.greutateDorita}
+
+Înălțime, vârstă, sex:
+${input.inaltimeVarstaSex}
+
+Nivel activitate:
+${input.nivelActivitate}
+
+Termen:
+${input.termen || "Nu a fost specificat."}
+
+Alimentație actuală:
+${input.alimentatieActuala}
+
+Antrenamente disponibile:
+${input.antrenamenteDisponibile || "Nu au fost specificate."}
+
+Limitări:
+${input.limitari || "Nu au fost specificate."}
+
+Creează:
+1. Diagnostic realist
+2. Ritm sănătos de slăbire
+3. Plan alimentar orientativ
+4. Plan de mișcare
+5. Obiceiuri zilnice
+6. Cum se măsoară progresul
+`,
+  },
+
+  "antrenor-personal-ai": {
+    toolId: "antrenor-personal-ai",
+    categorySlug: "fitness",
+    name: "Antrenor Personal AI",
+    requiredFields: ["obiectivFitness", "situatieActuala", "nivelExperienta", "locAntrenament"],
+    systemPrompt: `
+Ești ITER AI, un antrenor personal premium: practic, adaptat, sigur și orientat spre rezultate sustenabile.
+
+Misiunea ta este să oferi userului un plan complet de fitness pe baza situației sale reale.
+
+Reguli:
+- Scrie în limba română.
+- Fii direct, dar responsabil.
+- Adaptează planul la nivel, locație, alimentație, timp și limitări.
+- Nu oferi diagnostic medical.
+`,
+    buildUserPrompt: (input) => `
+Oferă consultanță fitness personalizată pentru:
+
+Obiectiv fitness:
+${input.obiectivFitness}
+
+Situație actuală:
+${input.situatieActuala}
+
+Nivel experiență:
+${input.nivelExperienta}
+
+Loc antrenament:
+${input.locAntrenament}
+
+Zile disponibile:
+${input.zileDisponibile || "Recomandă tu."}
+
+Alimentație:
+${input.alimentatie || "Nu a fost specificată."}
+
+Limitări / accidentări:
+${input.limitariAccidentari || "Nu au fost specificate."}
+
+Stil antrenor:
+${input.stilAntrenor || "Simplu și practic."}
+
+Creează:
+1. Diagnostic fitness
+2. Plan de antrenament
+3. Recomandări alimentare
+4. Obiceiuri importante
+5. Plan pe 30 zile
+6. Primul pas concret
+`,
+  },
+
+  "planner-meal-prep": {
+    toolId: "planner-meal-prep",
+    categorySlug: "fitness",
+    name: "Planner Meal Prep",
+    requiredFields: ["obiectiv", "numarZile", "numarMesePeZi"],
+    systemPrompt: `
+Ești ITER AI, un planner premium pentru meal prep fitness.
+
+Misiunea ta este să creezi un plan de mese practic, organizat și ușor de gătit.
+
+Reguli:
+- Scrie în limba română.
+- Ține cont de obiectiv, buget, preferințe și timp de gătit.
+- Nu oferi recomandări medicale.
+- Include listă de cumpărături și organizare pe zile.
+`,
+    buildUserPrompt: (input) => `
+Creează planner meal prep:
+
+Obiectiv:
+${input.obiectiv}
+
+Număr zile:
+${input.numarZile}
+
+Mese pe zi:
+${input.numarMesePeZi}
+
+Date corporale:
+${input.dateCorporale || "Nu au fost specificate."}
+
+Preferințe alimentare:
+${input.preferinteAlimentare || "Nu au fost specificate."}
+
+Alimente de evitat:
+${input.alimenteDeEvitat || "Nu au fost specificate."}
+
+Buget:
+${input.buget || "Nu a fost specificat."}
+
+Timp gătit:
+${input.timpGatit || "Nu a fost specificat."}
+
+Creează:
+1. Plan pe zile
+2. Mese recomandate
+3. Listă cumpărături
+4. Pași de gătire eficientă
+5. Variante de înlocuire
+`,
+  },
+
+  "plan-masa-musculare": {
+    toolId: "plan-masa-musculare",
+    categorySlug: "fitness",
+    name: "Plan Masă Musculară",
+    requiredFields: ["greutateInaltimeVarsta", "nivelExperienta", "zileAntrenament", "locAntrenament", "alimentatieActuala"],
+    systemPrompt: `
+Ești ITER AI, un coach premium pentru masă musculară și hipertrofie.
+
+Misiunea ta este să creezi un plan realist de creștere musculară, cu antrenament, alimentație, progresie și recuperare.
+
+Reguli:
+- Scrie în limba română.
+- Nu promite rezultate garantate.
+- Recomandă surplus caloric realist și progres treptat.
+- Adaptează programul la nivel, locație și limitări.
+`,
+    buildUserPrompt: (input) => `
+Creează plan de masă musculară:
+
+Greutate / înălțime / vârstă:
+${input.greutateInaltimeVarsta}
+
+Nivel experiență:
+${input.nivelExperienta}
+
+Zile antrenament:
+${input.zileAntrenament}
+
+Loc antrenament:
+${input.locAntrenament}
+
+Alimentație actuală:
+${input.alimentatieActuala}
+
+Obiectiv masă:
+${input.obiectivMasa || "Nu a fost specificat."}
+
+Grupe prioritare:
+${input.grupePrioritare || "Nu au fost specificate."}
+
+Limitări:
+${input.limitari || "Nu au fost specificate."}
+
+Creează:
+1. Diagnostic
+2. Strategie de surplus caloric
+3. Program de antrenament
+4. Recomandări alimentare
+5. Progresie săptămânală
+6. Greșeli de evitat
+`,
+  },
+
+  "calculator-calorii": {
+    toolId: "calculator-calorii",
+    categorySlug: "fitness",
+    name: "Calculator Calorii",
+    requiredFields: ["sex", "varsta", "inaltime", "greutate", "nivelActivitate", "obiectiv"],
+    systemPrompt: `
+Ești ITER AI, un calculator premium de calorii pentru fitness.
+
+Misiunea ta este să estimezi necesarul caloric zilnic pentru obiectivul userului.
+
+Reguli:
+- Scrie în limba română.
+- Rezultatul este estimativ.
+- Explică întreținere, deficit sau surplus.
+- Oferă intervale realiste, nu cifre absolute rigide.
+`,
+    buildUserPrompt: (input) => `
+Calculează caloriile pentru:
+
+Sex:
+${input.sex}
+
+Vârstă:
+${input.varsta}
+
+Înălțime:
+${input.inaltime}
+
+Greutate:
+${input.greutate}
+
+Nivel activitate:
+${input.nivelActivitate}
+
+Obiectiv:
+${input.obiectiv}
+
+Antrenamente pe săptămână:
+${input.antrenamente || "Nu a fost specificat."}
+
+Detalii suplimentare:
+${input.detaliiSuplimentare || "Nu au fost specificate."}
+
+Creează:
+1. Calorii de menținere estimate
+2. Calorii pentru obiectiv
+3. Recomandare de ajustare
+4. Cum urmărește progresul
+5. Atenționări utile
+`,
+  },
+
+  "plan-deficit-caloric": {
+    toolId: "plan-deficit-caloric",
+    categorySlug: "fitness",
+    name: "Plan Deficit Caloric",
+    requiredFields: ["greutateInaltimeVarstaSex", "nivelActivitate", "obiectivSlabire", "alimentatieActuala"],
+    systemPrompt: `
+Ești ITER AI, un coach premium pentru deficit caloric sănătos și sustenabil.
+
+Misiunea ta este să creezi un plan de deficit caloric care ajută userul să slăbească fără abordări extreme.
+
+Reguli:
+- Scrie în limba română.
+- Nu propune deficit agresiv nesănătos.
+- Include proteine, fibre, sațietate, pași și antrenament.
+- Menționează că estimările trebuie ajustate după progres.
+`,
+    buildUserPrompt: (input) => `
+Creează plan de deficit caloric:
+
+Date corporale:
+${input.greutateInaltimeVarstaSex}
+
+Nivel activitate:
+${input.nivelActivitate}
+
+Obiectiv slăbire:
+${input.obiectivSlabire}
+
+Ritm dorit:
+${input.ritmDorit || "Recomandă tu."}
+
+Alimentație actuală:
+${input.alimentatieActuala}
+
+Antrenamente:
+${input.antrenamente || "Nu au fost specificate."}
+
+Preferințe alimentare:
+${input.preferinteAlimentare || "Nu au fost specificate."}
+
+Obstacole:
+${input.obstacole || "Nu au fost specificate."}
+
+Creează:
+1. Deficit recomandat orientativ
+2. Calorii estimate, dacă se poate
+3. Structură alimentară
+4. Strategie pentru foame și pofte
+5. Plan pe 7 zile
+`,
+  },
+
+  "plan-alimentar": {
+    toolId: "plan-alimentar",
+    categorySlug: "fitness",
+    name: "Plan Alimentar",
+    requiredFields: ["obiectiv", "dateCorporale", "numarMese"],
+    systemPrompt: `
+Ești ITER AI, un coach premium pentru planuri alimentare fitness.
+
+Misiunea ta este să creezi un plan alimentar orientativ, practic și adaptat obiectivului userului.
+
+Reguli:
+- Scrie în limba română.
+- Nu oferi dietă medicală.
+- Ține cont de preferințe, buget, timp și obiectiv.
+- Include alternative simple.
+`,
+    buildUserPrompt: (input) => `
+Creează plan alimentar:
+
+Obiectiv:
+${input.obiectiv}
+
+Date corporale:
+${input.dateCorporale}
+
+Target calorii/macro:
+${input.caloriiSauTarget || "Nu a fost specificat."}
+
+Număr mese:
+${input.numarMese}
+
+Preferințe alimentare:
+${input.preferinteAlimentare || "Nu au fost specificate."}
+
+Alimente de evitat:
+${input.alimenteEvitat || "Nu au fost specificate."}
+
+Buget:
+${input.buget || "Nu a fost specificat."}
+
+Timp gătit:
+${input.timpGatit || "Nu a fost specificat."}
+
+Creează:
+1. Plan alimentar pe o zi
+2. Variante pentru fiecare masă
+3. Recomandări proteine/carbo/grăsimi
+4. Listă cumpărături
+5. Ajustări pentru obiectiv
+`,
+  },
+
+  "plan-transformare-90zile": {
+    toolId: "plan-transformare-90zile",
+    categorySlug: "fitness",
+    name: "Plan Transformare 90 Zile",
+    requiredFields: ["obiectivTransformare", "situatieActuala", "nivelExperienta", "locAntrenament", "zilePeSaptamana", "alimentatie"],
+    systemPrompt: `
+Ești ITER AI, un coach premium pentru transformări fitness de 90 de zile.
+
+Misiunea ta este să creezi un plan complet, realist și structurat pe 3 luni.
+
+Reguli:
+- Scrie în limba română.
+- Nu promite transformări garantate.
+- Împarte planul pe etape.
+- Include antrenament, alimentație, progres, obiceiuri și evaluări.
+`,
+    buildUserPrompt: (input) => `
+Creează plan de transformare pe 90 zile:
+
+Obiectiv:
+${input.obiectivTransformare}
+
+Situație actuală:
+${input.situatieActuala}
+
+Nivel:
+${input.nivelExperienta}
+
+Loc antrenament:
+${input.locAntrenament}
+
+Zile pe săptămână:
+${input.zilePeSaptamana}
+
+Alimentație:
+${input.alimentatie}
+
+Obstacole:
+${input.obstacole || "Nu au fost specificate."}
+
+Stil plan:
+${input.stilPlan || "Realist și sustenabil."}
+
+Creează:
+1. Diagnostic
+2. Faza 1: zilele 1-30
+3. Faza 2: zilele 31-60
+4. Faza 3: zilele 61-90
+5. Program antrenament
+6. Strategie alimentară
+7. Tracking progres
+`,
+  },
+
+  "obiective-fitness": {
+    toolId: "obiective-fitness",
+    categorySlug: "fitness",
+    name: "Obiective Fitness",
+    requiredFields: ["situatieActuala", "obiectivPrincipal", "termen"],
+    systemPrompt: `
+Ești ITER AI, un coach premium pentru setarea obiectivelor de fitness.
+
+Misiunea ta este să transforme obiectivele vagi în obiective clare, realiste și măsurabile.
+
+Reguli:
+- Scrie în limba română.
+- Folosește formulare SMART când este util.
+- Nu seta obiective nerealiste sau nesănătoase.
+- Include pași săptămânali și indicatori de progres.
+`,
+    buildUserPrompt: (input) => `
+Creează obiective fitness:
+
+Situație actuală:
+${input.situatieActuala}
+
+Obiectiv principal:
+${input.obiectivPrincipal}
+
+Termen:
+${input.termen}
+
+Nivel experiență:
+${input.nivelExperienta || "Nu a fost specificat."}
+
+Resurse disponibile:
+${input.resurseDisponibile || "Nu au fost specificate."}
+
+Obstacole:
+${input.obstacole || "Nu au fost specificate."}
+
+Stil obiective:
+${input.stilObiective || "SMART"}
+
+Creează:
+1. Obiectiv principal reformulat
+2. Obiective secundare
+3. Pași săptămânali
+4. Indicatori de progres
+5. Obstacole și soluții
+`,
+  },
+
+  "plan-surplus-caloric": {
+    toolId: "plan-surplus-caloric",
+    categorySlug: "fitness",
+    name: "Plan Surplus Caloric",
+    requiredFields: ["greutateInaltimeVarstaSex", "nivelActivitate", "obiectivMasa", "alimentatieActuala", "antrenamente"],
+    systemPrompt: `
+Ești ITER AI, un coach premium pentru surplus caloric și creștere musculară.
+
+Misiunea ta este să creezi un plan de surplus caloric realist, cu accent pe masă musculară și controlul grăsimii.
+
+Reguli:
+- Scrie în limba română.
+- Nu recomanda surplus excesiv.
+- Include proteine, calorii, mese simple și progresie.
+- Ajustează planul după apetit, antrenamente și obiectiv.
+`,
+    buildUserPrompt: (input) => `
+Creează plan de surplus caloric:
+
+Date corporale:
+${input.greutateInaltimeVarstaSex}
+
+Nivel activitate:
+${input.nivelActivitate}
+
+Obiectiv masă:
+${input.obiectivMasa}
+
+Ritm dorit:
+${input.ritmDorit || "Recomandă tu."}
+
+Alimentație actuală:
+${input.alimentatieActuala}
+
+Antrenamente:
+${input.antrenamente}
+
+Preferințe alimentare:
+${input.preferinteAlimentare || "Nu au fost specificate."}
+
+Probleme:
+${input.probleme || "Nu au fost specificate."}
+
+Creează:
+1. Surplus caloric recomandat orientativ
+2. Strategie alimentară
+3. Exemple de mese
+4. Recomandări pentru antrenament
+5. Cum ajustează dacă se îngrașă prea repede
+`,
+  },
+
+  "tracker-progres": {
+    toolId: "tracker-progres",
+    categorySlug: "fitness",
+    name: "Tracker Progres",
+    requiredFields: ["obiectiv", "situatieStart", "indicatoriUrmariti", "frecventa"],
+    systemPrompt: `
+Ești ITER AI, un coach premium pentru tracking de progres fitness.
+
+Misiunea ta este să creezi un sistem clar de urmărire a progresului, fără obsesie și fără haos.
+
+Reguli:
+- Scrie în limba română.
+- Recomandă indicatori relevanți pentru obiectiv.
+- Explică ce se măsoară zilnic, săptămânal și lunar.
+- Nu pune accent doar pe cântar.
+`,
+    buildUserPrompt: (input) => `
+Creează tracker de progres:
+
+Obiectiv:
+${input.obiectiv}
+
+Situație de start:
+${input.situatieStart}
+
+Indicatori urmăriți:
+${input.indicatoriUrmariti}
+
+Frecvență:
+${input.frecventa}
+
+Perioadă:
+${input.perioada || "Nu a fost specificată."}
+
+Obstacole:
+${input.obstacole || "Nu au fost specificate."}
+
+Stil tracker:
+${input.stilTracker || "Simplu"}
+
+Creează:
+1. Sistem de tracking
+2. Tabel de urmărit
+3. Evaluare săptămânală
+4. Ce indicatori contează cel mai mult
+5. Cum ajustează planul
+`,
+  },
+
+  "program-acasa": {
+    toolId: "program-acasa",
+    categorySlug: "fitness",
+    name: "Program Acasă",
+    requiredFields: ["obiectiv", "nivel", "echipament", "zilePeSaptamana"],
+    systemPrompt: `
+Ești ITER AI, un antrenor premium pentru programe de fitness acasă.
+
+Misiunea ta este să creezi antrenamente eficiente, sigure și adaptate echipamentului disponibil.
+
+Reguli:
+- Scrie în limba română.
+- Adaptează exercițiile la spațiu, echipament și limitări.
+- Include variante fără echipament când este util.
+- Evită exercițiile riscante pentru useri cu dureri/accidentări.
+`,
+    buildUserPrompt: (input) => `
+Creează program de antrenament acasă:
+
+Obiectiv:
+${input.obiectiv}
+
+Nivel:
+${input.nivel}
+
+Echipament:
+${input.echipament}
+
+Zile pe săptămână:
+${input.zilePeSaptamana}
+
+Timp pe sesiune:
+${input.timpPerSesiune || "Nu a fost specificat."}
+
+Spațiu disponibil:
+${input.spatiuDisponibil || "Nu a fost specificat."}
+
+Limitări:
+${input.limitari || "Nu au fost specificate."}
+
+Creează:
+1. Program săptămânal
+2. Exerciții pe zile
+3. Seturi și repetări
+4. Variante mai ușoare/mai grele
+5. Încălzire și recuperare
+`,
+  },
+
+  "program-sala": {
+    toolId: "program-sala",
+    categorySlug: "fitness",
+    name: "Program Sală",
+    requiredFields: ["obiectiv", "nivel", "zilePeSaptamana"],
+    systemPrompt: `
+Ești ITER AI, un antrenor premium pentru programe de sală.
+
+Misiunea ta este să creezi un program de sală eficient, structurat și adaptat obiectivului userului.
+
+Reguli:
+- Scrie în limba română.
+- Include exerciții, seturi, repetări, pauze și progresie.
+- Adaptează programul la nivel, split, grupe prioritare și limitări.
+`,
+    buildUserPrompt: (input) => `
+Creează program de sală:
+
+Obiectiv:
+${input.obiectiv}
+
+Nivel:
+${input.nivel}
+
+Zile pe săptămână:
+${input.zilePeSaptamana}
+
+Timp per antrenament:
+${input.timpPerAntrenament || "Nu a fost specificat."}
+
+Split preferat:
+${input.splitPreferat || "Nu a fost specificat."}
+
+Grupe prioritare:
+${input.grupePrioritare || "Nu au fost specificate."}
+
+Exerciții preferate/de evitat:
+${input.exercitiiEvitatSauPreferate || "Nu au fost specificate."}
+
+Limitări / accidentări:
+${input.limitariAccidentari || "Nu au fost specificate."}
+
+Creează:
+1. Split recomandat
+2. Program pe zile
+3. Exerciții, seturi, repetări
+4. Pauze și intensitate
+5. Reguli de progresie
+6. Greșeli de evitat
+`,
+  },
+
+  "program-abdomen": {
+    toolId: "program-abdomen",
+    categorySlug: "fitness",
+    name: "Program Abdomen",
+    requiredFields: ["obiectivAbdomen", "nivel", "locAntrenament", "frecventa"],
+    systemPrompt: `
+Ești ITER AI, un antrenor premium pentru abdomen, core și stabilitate.
+
+Misiunea ta este să creezi un program eficient pentru abdomen, adaptat obiectivului și nivelului userului.
+
+Reguli:
+- Scrie în limba română.
+- Explică faptul că abdomenul definit depinde și de procentul de grăsime, nu doar de exerciții.
+- Evită exercițiile care pot agrava durerile lombare.
+`,
+    buildUserPrompt: (input) => `
+Creează program pentru abdomen:
+
+Obiectiv abdomen:
+${input.obiectivAbdomen}
+
+Nivel:
+${input.nivel}
+
+Loc antrenament:
+${input.locAntrenament}
+
+Frecvență:
+${input.frecventa}
+
+Timp per sesiune:
+${input.timpPerSesiune || "Nu a fost specificat."}
+
+Echipament:
+${input.echipament || "Nu a fost specificat."}
+
+Context:
+${input.nivelGrasimeSauContext || "Nu a fost specificat."}
+
+Limitări:
+${input.limitari || "Nu au fost specificate."}
+
+Creează:
+1. Program pe săptămână
+2. Exerciții pentru core
+3. Seturi și repetări
+4. Recomandări pentru definire
+5. Greșeli de evitat
+`,
+  },
+
+  "program-forta": {
+    toolId: "program-forta",
+    categorySlug: "fitness",
+    name: "Program Forță",
+    requiredFields: ["obiectivForta", "nivelExperienta", "zilePeSaptamana", "locAntrenament"],
+    systemPrompt: `
+Ești ITER AI, un antrenor premium pentru forță și progresie.
+
+Misiunea ta este să creezi programe de forță structurate, sigure și progresive.
+
+Reguli:
+- Scrie în limba română.
+- Include exerciții principale, accesorii, progresie și recuperare.
+- Nu recomanda încercări maxime frecvente pentru începători.
+- Adaptează programul la accidentări și echipament.
+`,
+    buildUserPrompt: (input) => `
+Creează program de forță:
+
+Obiectiv forță:
+${input.obiectivForta}
+
+Nivel experiență:
+${input.nivelExperienta}
+
+Recorduri actuale:
+${input.recorduriActuale || "Nu au fost specificate."}
+
+Zile pe săptămână:
+${input.zilePeSaptamana}
+
+Loc antrenament:
+${input.locAntrenament}
+
+Exerciții prioritare:
+${input.exercitiiPrioritare || "Nu au fost specificate."}
+
+Limitări / accidentări:
+${input.limitariAccidentari || "Nu au fost specificate."}
+
+Orizont timp:
+${input.orizontTimp || "Recomandă tu."}
+
+Creează:
+1. Program de forță
+2. Exerciții principale
+3. Exerciții accesorii
+4. Progresie
+5. Deload/recuperare
+6. Reguli de siguranță
+`,
+  },
+
+  "program-alergare": {
+    toolId: "program-alergare",
+    categorySlug: "fitness",
+    name: "Program Alergare",
+    requiredFields: ["obiectivAlergare", "nivelActual", "zilePeSaptamana"],
+    systemPrompt: `
+Ești ITER AI, un antrenor premium pentru alergare și condiție fizică.
+
+Misiunea ta este să creezi programe de alergare sigure, progresive și adaptate nivelului userului.
+
+Reguli:
+- Scrie în limba română.
+- Crește volumul gradual.
+- Include zile ușoare, recuperare și prevenție accidentări.
+- Dacă userul are dureri, recomandă consult medical/fizioterapie înainte de progresie.
+`,
+    buildUserPrompt: (input) => `
+Creează program de alergare:
+
+Obiectiv alergare:
+${input.obiectivAlergare}
+
+Nivel actual:
+${input.nivelActual}
+
+Zile pe săptămână:
+${input.zilePeSaptamana}
+
+Distanță / timp actual:
+${input.distantaSauTimpActual || "Nu a fost specificat."}
+
+Termen obiectiv:
+${input.termenObiectiv || "Nu a fost specificat."}
+
+Loc alergare:
+${input.locAlergare || "Nu a fost specificat."}
+
+Limitări / accidentări:
+${input.limitariAccidentari || "Nu au fost specificate."}
+
+Preferințe:
+${input.preferinte || "Nu au fost specificate."}
+
+Creează:
+1. Program pe săptămâni
+2. Tipuri de alergări
+3. Ritm recomandat
+4. Încălzire și recuperare
+5. Reguli de progres
+6. Ce să eviți
 `,
   },
 };
