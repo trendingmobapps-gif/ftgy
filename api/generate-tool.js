@@ -28,14 +28,14 @@ const MAX_FILE_SIZE = 10 * 1024 * 1024;
 // blow past the model context window.
 const MAX_EXTRACTED_CHARS = 40000;
 
-// Preferred models for tool generation, strongest first. We intentionally use a
-// strong (but not the most expensive reasoning) model to improve output quality,
-// and fall back when a model is unavailable on the account.
-const TOOL_GEN_MODELS = ["gpt-5", "gpt-5.1", "gpt-4.1"];
+// Preferred models for tool generation, strongest first. We fall back when a
+// model is unavailable on the account. gpt-4.1-mini is intentionally NOT here;
+// it is only used as a last resort if every model above fails.
+const TOOL_GEN_MODELS = ["gpt-5.1", "gpt-5", "gpt-4.1", "gpt-4.1-mini"];
 
-// Newer GPT-5 family models only accept the default temperature/top_p and use
-// `max_completion_tokens`, while gpt-4 models use `temperature`/`top_p`/`max_tokens`.
-function supportsLegacySamplingParams(model) {
+// Only the gpt-4 family accepts custom sampling params (temperature/top_p).
+// GPT-5 reasoning models reject them, so we omit them for those.
+function supportsCustomSampling(model) {
   return model.startsWith("gpt-4");
 }
 
@@ -55,30 +55,58 @@ function isModelUnavailableError(status, errText) {
   );
 }
 
-// Calls the chat completions API, trying TOOL_GEN_MODELS in order. Falls back to
+// Robustly extracts the generated text from an OpenAI response, supporting both
+// the Responses API (output_text / output[].content[].text) and the older
+// chat/completions shape (choices[0].message.content) as a safety net.
+function extractResponseText(data) {
+  if (!data || typeof data !== "object") return "";
+
+  // Responses API convenience field.
+  if (typeof data.output_text === "string" && data.output_text.trim()) {
+    return data.output_text.trim();
+  }
+
+  // Responses API structured output array.
+  if (Array.isArray(data.output)) {
+    const text = data.output
+      .flatMap((item) => (Array.isArray(item?.content) ? item.content : []))
+      .map((c) => (typeof c?.text === "string" ? c.text : ""))
+      .join("")
+      .trim();
+    if (text) return text;
+  }
+
+  // Chat/completions fallback.
+  const chat = data?.choices?.[0]?.message?.content;
+  if (typeof chat === "string" && chat.trim()) return chat.trim();
+
+  return "";
+}
+
+// Calls the OpenAI Responses API, trying TOOL_GEN_MODELS in order. Falls back to
 // the next model only on availability errors; other errors stop the loop and are
-// surfaced. Returns { data } on success or { error } on failure.
+// surfaced. Returns { data, model } on success or { error } on failure.
+// We use the Responses API because GPT-5 reasoning models can return empty
+// chat/completions content (reasoning tokens consume the token budget), whereas
+// the Responses API reliably exposes the final text via output_text.
 async function callToolModel({ systemPrompt, userPrompt, apiKey }) {
   let lastError = "";
   for (const model of TOOL_GEN_MODELS) {
     const body = {
       model,
-      messages: [
-        { role: "system", content: systemPrompt },
-        { role: "user", content: userPrompt },
-      ],
+      instructions: systemPrompt,
+      input: userPrompt,
+      // Generous budget so GPT-5 reasoning tokens don't starve the final text.
+      max_output_tokens: 4000,
     };
-    if (supportsLegacySamplingParams(model)) {
+    if (supportsCustomSampling(model)) {
       body.temperature = 0.35;
       body.top_p = 0.9;
-      body.max_tokens = 1800;
-    } else {
-      body.max_completion_tokens = 1800;
     }
 
     let openaiRes;
     try {
-      openaiRes = await fetch("https://api.openai.com/v1/chat/completions", {
+      openaiRes = await fetch("https://api.openai.com/v1/responses", {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
@@ -93,7 +121,20 @@ async function callToolModel({ systemPrompt, userPrompt, apiKey }) {
 
     if (openaiRes.ok) {
       const data = await openaiRes.json();
-      return { data };
+      const text = extractResponseText(data);
+      if (text) {
+        return { data, model, text };
+      }
+      // Successful HTTP call but no usable text: log server-side and try the
+      // next model rather than failing outright.
+      console.log(
+        "[v0] generate-tool empty response from model",
+        model,
+        "raw:",
+        JSON.stringify(data).slice(0, 2000),
+      );
+      lastError = "empty response";
+      continue;
     }
 
     const errText = await openaiRes.text();
@@ -731,26 +772,24 @@ Instrucțiuni de formatare:
 - Nu menționa Markdown.`;
 
   try {
-    const { data, error: modelError } = await callToolModel({
+    const { text, error: modelError } = await callToolModel({
       systemPrompt: tool.systemPrompt.trim(),
       userPrompt,
       apiKey,
     });
 
-    if (!data) {
-      res.status(200).json({
-        success: false,
-        message: `OpenAI error: ${modelError || "model unavailable"}`,
-      });
-      return;
-    }
-
-    const result = data?.choices?.[0]?.message?.content?.trim() || "";
+    const result = typeof text === "string" ? text.trim() : "";
 
     if (!result) {
+      // Either every model failed or returned empty text. Details are already
+      // logged server-side; show the user a clean, friendly message.
+      console.log(
+        "[v0] generate-tool failed to produce result. lastError:",
+        modelError || "unknown",
+      );
       res.status(200).json({
         success: false,
-        message: "OpenAI error: empty response.",
+        message: "Nu am putut genera răspunsul. Te rugăm să încerci din nou.",
       });
       return;
     }
@@ -767,9 +806,10 @@ Instrucțiuni de formatare:
       result,
     });
   } catch (error) {
+    console.log("[v0] generate-tool unexpected error:", error?.message);
     res.status(200).json({
       success: false,
-      message: `OpenAI error: ${error.message}`,
+      message: "Nu am putut genera răspunsul. Te rugăm să încerci din nou.",
     });
   }
 }
