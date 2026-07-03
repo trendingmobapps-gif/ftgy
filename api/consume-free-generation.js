@@ -3,6 +3,8 @@
 // successfully receives an AI response. Idempotent via idempotency_key.
 // Uses the Supabase REST API directly via fetch. No new packages.
 
+import { randomUUID } from "node:crypto";
+
 function setCorsHeaders(res) {
   res.setHeader("Access-Control-Allow-Origin", "*");
   res.setHeader("Access-Control-Allow-Methods", "POST, OPTIONS");
@@ -35,6 +37,30 @@ const VALID_ACTION_TYPES = [
   "tool_generation",
   "category_chat",
   "specialist_chat",
+];
+
+// Action types that operate on an ITER AI tool category and therefore require
+// a valid categorySlug.
+const CATEGORY_ACTION_TYPES = ["tool_generation", "category_chat"];
+
+// Canonical Wix specialist IDs. Specialist chat is independent from the 8 tool
+// categories, so these are validated separately and never mapped to a
+// categorySlug.
+const VALID_SPECIALIST_SLUGS = [
+  "legal-guide",
+  "medical-guide",
+  "fiscal-guide",
+  "financial-guide",
+  "architecture-guide",
+  "construction-guide",
+  "interior-guide",
+  "auto-guide",
+  "business-guide",
+  "marketing-guide",
+  "career-guide",
+  "clarity-guide",
+  "fitness-guide",
+  "personal-guide",
 ];
 
 // Extract the internal secret from any of the supported locations.
@@ -251,29 +277,8 @@ export default async function handler(req, res) {
     return;
   }
 
-  const rawCategorySlug = body.categorySlug;
-  if (
-    !rawCategorySlug ||
-    typeof rawCategorySlug !== "string" ||
-    !rawCategorySlug.trim()
-  ) {
-    res.status(400).json({
-      success: false,
-      error: "Bad request: categorySlug is required.",
-    });
-    return;
-  }
-
-  const categorySlug = rawCategorySlug.trim();
-
-  if (!VALID_CATEGORY_SLUGS.includes(categorySlug)) {
-    res.status(400).json({
-      success: false,
-      error: "Bad request: categorySlug is not valid.",
-    });
-    return;
-  }
-
+  // Validate actionType first, because whether categorySlug is required depends
+  // on it (specialist_chat does not use categorySlug).
   const rawActionType = body.actionType;
   if (
     !rawActionType ||
@@ -297,20 +302,39 @@ export default async function handler(req, res) {
     return;
   }
 
-  const rawIdempotencyKey = body.idempotencyKey;
-  if (
-    !rawIdempotencyKey ||
-    typeof rawIdempotencyKey !== "string" ||
-    !rawIdempotencyKey.trim()
-  ) {
-    res.status(400).json({
-      success: false,
-      error: "Bad request: idempotencyKey is required.",
-    });
-    return;
-  }
+  const isSpecialistChat = actionType === "specialist_chat";
 
-  const idempotencyKey = rawIdempotencyKey.trim();
+  // categorySlug handling:
+  // - tool_generation / category_chat: required and must be a valid category.
+  // - specialist_chat: optional; always stored as null in usage_events.
+  let categorySlug = null;
+
+  if (CATEGORY_ACTION_TYPES.includes(actionType)) {
+    const rawCategorySlug = body.categorySlug;
+    if (
+      !rawCategorySlug ||
+      typeof rawCategorySlug !== "string" ||
+      !rawCategorySlug.trim()
+    ) {
+      res.status(400).json({
+        success: false,
+        error: "Bad request: categorySlug is required.",
+      });
+      return;
+    }
+
+    const trimmedCategorySlug = rawCategorySlug.trim();
+
+    if (!VALID_CATEGORY_SLUGS.includes(trimmedCategorySlug)) {
+      res.status(400).json({
+        success: false,
+        error: "Bad request: categorySlug is not valid.",
+      });
+      return;
+    }
+
+    categorySlug = trimmedCategorySlug;
+  }
 
   // Optional fields.
   const toolSlug =
@@ -321,6 +345,32 @@ export default async function handler(req, res) {
     typeof body.specialistSlug === "string" && body.specialistSlug.trim()
       ? body.specialistSlug.trim()
       : null;
+
+  // specialist_chat requires a valid canonical specialist slug.
+  if (isSpecialistChat) {
+    if (!specialistSlug) {
+      res.status(400).json({
+        success: false,
+        error: "Bad request: specialistSlug is required for specialist_chat.",
+      });
+      return;
+    }
+
+    if (!VALID_SPECIALIST_SLUGS.includes(specialistSlug)) {
+      res.status(400).json({
+        success: false,
+        error: "Bad request: specialistSlug is not valid.",
+      });
+      return;
+    }
+  }
+
+  // idempotencyKey is preferred from the caller, but we generate a stable
+  // fallback so the endpoint stays idempotent per request.
+  const idempotencyKey =
+    typeof body.idempotencyKey === "string" && body.idempotencyKey.trim()
+      ? body.idempotencyKey.trim()
+      : randomUUID();
   const chatSessionId =
     typeof body.chatSessionId === "string" && body.chatSessionId.trim()
       ? body.chatSessionId.trim()
@@ -400,6 +450,7 @@ export default async function handler(req, res) {
         email,
         categorySlug,
         actionType,
+        specialistSlug,
         hasAccess: existingEvent.was_consumed
           ? true
           : existingEvent.access_type === "premium" ||
@@ -478,6 +529,7 @@ export default async function handler(req, res) {
         email,
         categorySlug,
         actionType,
+        specialistSlug,
         hasAccess: false,
         accessType: "none",
         wasConsumed: false,
@@ -558,6 +610,7 @@ export default async function handler(req, res) {
         email,
         categorySlug,
         actionType,
+        specialistSlug,
         hasAccess: true,
         accessType: "premium",
         wasConsumed: false,
@@ -571,10 +624,15 @@ export default async function handler(req, res) {
     }
 
     // --- 6. Category access for the requested category: do NOT consume. ---
-    const categoryRow = activeAccess.find(
-      (row) =>
-        row.access_scope === "category" && row.category_slug === categorySlug
-    );
+    // Specialist chat is independent from the 8 tool categories, so category-
+    // only paid access must NOT count as paid access for specialist_chat.
+    const categoryRow = isSpecialistChat
+      ? null
+      : activeAccess.find(
+          (row) =>
+            row.access_scope === "category" &&
+            row.category_slug === categorySlug
+        );
 
     if (categoryRow) {
       const eventResult = await supabaseInsert({
@@ -616,6 +674,7 @@ export default async function handler(req, res) {
         email,
         categorySlug,
         actionType,
+        specialistSlug,
         hasAccess: true,
         accessType: "category",
         wasConsumed: false,
@@ -691,6 +750,7 @@ export default async function handler(req, res) {
         email,
         categorySlug,
         actionType,
+        specialistSlug,
         hasAccess: false,
         accessType: "none",
         wasConsumed: false,
@@ -757,6 +817,7 @@ export default async function handler(req, res) {
         email,
         categorySlug,
         actionType,
+        specialistSlug,
         hasAccess: false,
         accessType: "none",
         wasConsumed: false,
@@ -846,6 +907,7 @@ export default async function handler(req, res) {
       email,
       categorySlug,
       actionType,
+      specialistSlug,
       hasAccess: true,
       accessType: "free_trial",
       wasConsumed: true,
