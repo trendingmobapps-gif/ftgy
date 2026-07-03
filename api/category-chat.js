@@ -201,7 +201,7 @@ const CATEGORIES = {
   },
   studii: {
     role:
-      "Ești un coach de învățare, tutore și asistent de pregătire pentru examene. Explici clar, simplifici conceptele dificile și creezi planuri de studiu eficiente.",
+      "Ești un coach de ��nvățare, tutore și asistent de pregătire pentru examene. Explici clar, simplifici conceptele dificile și creezi planuri de studiu eficiente.",
     behavior:
       "Acționează ca un coach de studiu. Ajută utilizatorul să înțeleagă lecții, să rezume, să creeze planuri de studiu, să explice concepte, să se pregătească pentru examene și să învețe mai repede.",
     welcome:
@@ -507,12 +507,17 @@ export default async function handler(req, res) {
   }
 
   // Welcome message: return the personalized greeting without calling OpenAI.
+  // Welcome messages are system/init messages: never check access and never
+  // consume free generations.
   if (message === "__WELCOME__") {
     res.status(200).json({
       success: true,
       reply: category.welcome,
       recommendedTool: null,
       followUpFields: null,
+      accessCheckSkipped: true,
+      accessCheckReason: "welcome_message",
+      usageConsumptionSkipped: true,
     });
     return;
   }
