@@ -337,24 +337,55 @@ export default async function handler(req, res) {
         ? existingProfile.data[0]
         : null;
 
-    const profileRow = {
-      email,
-      // Preserve existing has_account; default to false for new profiles.
-      has_account: existingProfileRow ? existingProfileRow.has_account : false,
-      created_from: "purchase",
-      metadata: {
-        source: "api/wix-payment-success",
-        updated_at: nowIso,
+    // Payment info to record in profile metadata.
+    const paymentMetadata = {
+      source: "api/wix-payment-success",
+      last_payment: {
+        order_id: orderId,
+        plan,
+        product_id: productId || null,
+        amount: hasAmount ? amount : null,
+        currency,
+        processed_at: nowIso,
       },
+      updated_at: nowIso,
     };
 
-    const profileResult = await supabaseUpsert({
-      baseUrl: normalizedBaseUrl,
-      secretKey,
-      table: "profiles",
-      onConflict: "email",
-      row: profileRow,
-    });
+    let profileResult;
+
+    if (existingProfileRow) {
+      // Existing profile: preserve has_account, created_from, and identity
+      // fields. Only update metadata (merged) and updated_at.
+      const mergedMetadata =
+        existingProfileRow.metadata &&
+        typeof existingProfileRow.metadata === "object"
+          ? { ...existingProfileRow.metadata, ...paymentMetadata }
+          : paymentMetadata;
+
+      profileResult = await supabaseUpdate({
+        baseUrl: normalizedBaseUrl,
+        secretKey,
+        table: "profiles",
+        query: `email=eq.${encodeURIComponent(email)}`,
+        row: {
+          metadata: mergedMetadata,
+          updated_at: nowIso,
+        },
+      });
+    } else {
+      // No profile: create a new one.
+      profileResult = await supabaseInsert({
+        baseUrl: normalizedBaseUrl,
+        secretKey,
+        table: "profiles",
+        row: {
+          email,
+          has_account: false,
+          created_from: "purchase",
+          metadata: paymentMetadata,
+        },
+      });
+    }
 
     if (!profileResult.ok) {
       res.status(500).json({
