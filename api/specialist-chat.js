@@ -15,6 +15,8 @@
 //   success: { success: true, reply: "<markdown>", riskLevel: "green|yellow|orange|red|null" }
 //   error:   { success: false, message: "<error>" }
 
+import { randomUUID } from "node:crypto";
+
 // ---------------------------------------------------------------------------
 // Safety
 // ---------------------------------------------------------------------------
@@ -304,7 +306,276 @@ Răspunde STRICT cu un obiect JSON valid, fără text în plus, în forma:
 function setCorsHeaders(res) {
   res.setHeader("Access-Control-Allow-Origin", "*");
   res.setHeader("Access-Control-Allow-Methods", "POST, OPTIONS");
-  res.setHeader("Access-Control-Allow-Headers", "Content-Type");
+  res.setHeader(
+    "Access-Control-Allow-Headers",
+    "Content-Type, Authorization, x-iter-secret",
+  );
+}
+
+// Picks the first non-empty string from a list of candidate values.
+function firstNonEmpty(...candidates) {
+  for (const candidate of candidates) {
+    if (candidate === undefined || candidate === null) continue;
+    const value = String(candidate).trim();
+    if (value) return value;
+  }
+  return "";
+}
+
+// Builds the base URL of the incoming request so internal API calls target the
+// same host/deployment instead of a hardcoded domain.
+function getRequestBaseUrl(req) {
+  const proto = String(req.headers["x-forwarded-proto"] || "https")
+    .split(",")[0]
+    .trim();
+  const host = String(req.headers["x-forwarded-host"] || req.headers.host || "")
+    .split(",")[0]
+    .trim();
+  return host ? `${proto}://${host}` : "";
+}
+
+// Calls the internal POST /api/check-user-access endpoint. Returns
+// { ok, status, data } and never throws.
+async function callCheckUserAccess({ baseUrl, secret, email, categorySlug }) {
+  try {
+    const resp = await fetch(`${baseUrl}/api/check-user-access`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "x-iter-secret": secret,
+      },
+      body: JSON.stringify({ email, categorySlug }),
+    });
+    const data = await resp.json().catch(() => ({}));
+    return { ok: resp.ok, status: resp.status, data };
+  } catch (error) {
+    return {
+      ok: false,
+      status: 0,
+      data: null,
+      error: error?.message || "network error",
+    };
+  }
+}
+
+// Calls the internal POST /api/consume-free-generation endpoint. Returns
+// { ok, status, data } and never throws.
+async function callConsumeFreeGeneration({
+  baseUrl,
+  secret,
+  email,
+  specialistSlug,
+  chatSessionId,
+  idempotencyKey,
+}) {
+  try {
+    const resp = await fetch(`${baseUrl}/api/consume-free-generation`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "x-iter-secret": secret,
+      },
+      body: JSON.stringify({
+        email,
+        actionType: "specialist_chat",
+        specialistSlug,
+        chatSessionId,
+        idempotencyKey,
+        metadata: {
+          source: "api/specialist-chat.js",
+        },
+      }),
+    });
+    const data = await resp.json().catch(() => ({}));
+    return { ok: resp.ok, status: resp.status, data };
+  } catch (error) {
+    return {
+      ok: false,
+      status: 0,
+      data: null,
+      error: error?.message || "network error",
+    };
+  }
+}
+
+// --- Supabase REST helpers (chat_sessions dual-write) ---
+// These talk directly to the Supabase REST API using the same conventions as
+// the other endpoints in this project. They never throw.
+
+// Select rows from a Supabase table using a filtered GET query.
+async function supabaseSelect({ baseUrl, secretKey, table, query }) {
+  try {
+    const resp = await fetch(`${baseUrl}/rest/v1/${table}?${query}`, {
+      method: "GET",
+      headers: {
+        apikey: secretKey,
+        Authorization: `Bearer ${secretKey}`,
+        "Content-Type": "application/json",
+      },
+    });
+    const text = await resp.text();
+    let data;
+    try {
+      data = text ? JSON.parse(text) : null;
+    } catch {
+      data = text;
+    }
+    return { ok: resp.ok, status: resp.status, data };
+  } catch (error) {
+    return {
+      ok: false,
+      status: 0,
+      data: null,
+      error: error?.message || "network error",
+    };
+  }
+}
+
+// Upsert a row into a Supabase table (merge on the given conflict column).
+async function supabaseUpsert({ baseUrl, secretKey, table, row, onConflict }) {
+  try {
+    const url = `${baseUrl}/rest/v1/${table}?on_conflict=${encodeURIComponent(
+      onConflict,
+    )}`;
+    const resp = await fetch(url, {
+      method: "POST",
+      headers: {
+        apikey: secretKey,
+        Authorization: `Bearer ${secretKey}`,
+        "Content-Type": "application/json",
+        Prefer: "resolution=merge-duplicates,return=representation",
+      },
+      body: JSON.stringify(row),
+    });
+    const text = await resp.text();
+    let data;
+    try {
+      data = text ? JSON.parse(text) : null;
+    } catch {
+      data = text;
+    }
+    return { ok: resp.ok, status: resp.status, data };
+  } catch (error) {
+    return {
+      ok: false,
+      status: 0,
+      data: null,
+      error: error?.message || "network error",
+    };
+  }
+}
+
+// Dual-write the completed specialist chat into public.chat_sessions. Returns
+// { saved, error } and NEVER throws, so a Supabase failure can never break the
+// AI response. Wix chathistory remains the source of truth in parallel.
+async function saveSpecialistChatToSupabase({
+  email,
+  chatSessionId,
+  specialistSlug,
+  specialistName,
+  memberId,
+  messagesJson,
+  assistantReply,
+  idempotencyKey,
+  accessType,
+}) {
+  const baseUrl = process.env.SUPABASE_URL;
+  const secretKey = process.env.SUPABASE_SECRET_KEY;
+
+  if (!baseUrl || !secretKey) {
+    return { saved: false, error: "Supabase is not configured." };
+  }
+
+  try {
+    // Look up profile_id by email (best-effort; never fatal).
+    let profileId = null;
+    const profileLookup = await supabaseSelect({
+      baseUrl,
+      secretKey,
+      table: "profiles",
+      query: `email=eq.${encodeURIComponent(email)}&select=id&limit=1`,
+    });
+    if (
+      profileLookup.ok &&
+      Array.isArray(profileLookup.data) &&
+      profileLookup.data.length > 0
+    ) {
+      profileId = profileLookup.data[0].id || null;
+    }
+
+    // Preserve an existing chat_title if this session already exists.
+    let existingTitle = null;
+    const existing = await supabaseSelect({
+      baseUrl,
+      secretKey,
+      table: "chat_sessions",
+      query: `wix_item_id=eq.${encodeURIComponent(
+        chatSessionId,
+      )}&select=chat_title&limit=1`,
+    });
+    if (
+      existing.ok &&
+      Array.isArray(existing.data) &&
+      existing.data.length > 0 &&
+      existing.data[0].chat_title
+    ) {
+      existingTitle = existing.data[0].chat_title;
+    }
+
+    const preview =
+      typeof assistantReply === "string" ? assistantReply.slice(0, 100) : "";
+
+    const row = {
+      email,
+      wix_item_id: chatSessionId,
+      member_id: memberId || null,
+      chat_type: "specialist",
+      category_slug: null,
+      category_name: specialistName || null,
+      specialist_slug: specialistSlug,
+      chat_title:
+        existingTitle ||
+        `Specialist Chat - ${specialistName || specialistSlug}`,
+      messages_json: Array.isArray(messagesJson) ? messagesJson : [],
+      tools_json: [],
+      last_message_preview: preview,
+      source: "vercel",
+      metadata: {
+        source: "api/specialist-chat.js",
+        lastIdempotencyKey: idempotencyKey || null,
+        accessType: accessType || null,
+        updatedFrom: "specialist_chat",
+      },
+      updated_at: new Date().toISOString(),
+    };
+    // Only set profile_id when we actually found one, so we never overwrite an
+    // existing linkage with null.
+    if (profileId) {
+      row.profile_id = profileId;
+    }
+
+    const result = await supabaseUpsert({
+      baseUrl,
+      secretKey,
+      table: "chat_sessions",
+      row,
+      onConflict: "wix_item_id",
+    });
+
+    if (!result.ok) {
+      return {
+        saved: false,
+        error: "Supabase chat_sessions upsert failed.",
+      };
+    }
+
+    return { saved: true, error: null };
+  } catch (error) {
+    return {
+      saved: false,
+      error: error?.message || "Unexpected error saving chat session.",
+    };
+  }
 }
 
 export default async function handler(req, res) {
@@ -346,7 +617,10 @@ export default async function handler(req, res) {
     ? body.conversation
     : [];
 
-  const specialist = SPECIALISTS[specialistId];
+  // Prefer the explicit specialistSlug; fall back to the legacy specialistId.
+  const specialistSlug = firstNonEmpty(body.specialistSlug, specialistId);
+
+  const specialist = SPECIALISTS[specialistSlug];
   if (!specialist) {
     res.status(200).json({
       success: false,
@@ -355,13 +629,44 @@ export default async function handler(req, res) {
     return;
   }
 
+  // Access / free-trial consumption fields (optional; sent by the frontend).
+  const normalizedEmail = firstNonEmpty(
+    body.email,
+    body.userEmail,
+    body.memberEmail,
+    body.clientEmail,
+  ).toLowerCase();
+  // Prefer a frontend-supplied chat session id; otherwise generate a fallback.
+  const chatSessionId =
+    firstNonEmpty(body.chatSessionId, body.sessionId, body.conversationId) ||
+    randomUUID();
+  // Prefer a frontend-supplied idempotency key; otherwise generate a fallback so
+  // consume-free-generation stays idempotent per request.
+  const idempotencyKey =
+    firstNonEmpty(
+      body.idempotencyKey,
+      body.messageId,
+      body.chatMessageId,
+      body.requestId,
+    ) || randomUUID();
+  // Optional Wix member id and display name, used for the chat_sessions row.
+  const memberId = firstNonEmpty(body.memberId, body.wixMemberId) || null;
+  const specialistName =
+    firstNonEmpty(body.specialistName) || specialist.title || null;
+
   // Welcome mode: instant, personalized, no model call, no risk level.
+  // Welcome messages are system/init messages: never check access, never
+  // consume free generations, and never save to Supabase.
   const isWelcome = mode === "welcome" || message.trim() === "__WELCOME__";
   if (isWelcome) {
     res.status(200).json({
       success: true,
       reply: specialist.welcome,
       riskLevel: null,
+      accessCheckSkipped: true,
+      accessCheckReason: "welcome_message",
+      usageConsumptionSkipped: true,
+      chatSessionSaved: false,
     });
     return;
   }
@@ -401,6 +706,76 @@ export default async function handler(req, res) {
       message: "OPENAI_API_KEY nu este setat în mediul Vercel.",
     });
     return;
+  }
+
+  // --- Access control + free-trial consumption setup ---
+  const internalSecret = process.env.ITER_INTERNAL_API_SECRET;
+  const requestBaseUrl = getRequestBaseUrl(req);
+
+  // When no email is provided, keep the legacy behavior intact (temporary,
+  // until the Wix frontend sends the user email). We flag why the check was
+  // skipped and continue the specialist chat flow exactly as before.
+  const accessCheckSkipped = !normalizedEmail;
+  // Populated after a successful access check; included in the response.
+  let accessCheckResult = null;
+  // Resolved after a successful access check; used for consumption + save.
+  let accessType = null;
+
+  if (!accessCheckSkipped) {
+    if (!internalSecret) {
+      res.status(200).json({
+        success: false,
+        message: "Server misconfiguration: internal secret is not set.",
+      });
+      return;
+    }
+    if (!requestBaseUrl) {
+      res.status(200).json({
+        success: false,
+        message: "Server misconfiguration: could not resolve request host.",
+      });
+      return;
+    }
+
+    // Specialist chat is independent from the 8 tool categories, so we do NOT
+    // send a categorySlug: consume-free-generation only counts premium/all
+    // access as paid for specialist_chat (category-only access does not count).
+    const accessCheck = await callCheckUserAccess({
+      baseUrl: requestBaseUrl,
+      secret: internalSecret,
+      email: normalizedEmail,
+      categorySlug: null,
+    });
+
+    if (!accessCheck.ok || !accessCheck.data) {
+      console.log(
+        "[v0] specialist-chat access check failed:",
+        accessCheck.status,
+        accessCheck.error ||
+          JSON.stringify(accessCheck.data || {}).slice(0, 500),
+      );
+      res.status(200).json({
+        success: false,
+        message: "Nu am putut verifica accesul. Te rugăm să încerci din nou.",
+      });
+      return;
+    }
+
+    accessCheckResult = accessCheck.data;
+    accessType = accessCheck.data.accessType || null;
+
+    if (accessCheck.data.hasAccess !== true) {
+      // No paid access and no free generations: stop before calling OpenAI.
+      res.status(402).json({
+        success: false,
+        hasAccess: false,
+        shouldRedirectToCheckout: true,
+        reason: "no_paid_access_and_no_free_generations",
+        freeGenerations: accessCheck.data.freeGenerations,
+        message: "No access available. Please upgrade to continue.",
+      });
+      return;
+    }
   }
 
   try {
@@ -484,36 +859,122 @@ export default async function handler(req, res) {
       return;
     }
 
-    let parsed;
+    // Resolve the reply + riskLevel. If the model didn't return clean JSON,
+    // treat the raw text as the reply (with a null risk level).
+    let reply = "";
+    let riskLevel = null;
+    let parsed = null;
     try {
       parsed = JSON.parse(raw);
     } catch {
-      // If the model didn't return clean JSON, treat the text as the reply.
+      parsed = null;
+    }
+
+    if (parsed) {
+      reply =
+        typeof parsed.reply === "string" && parsed.reply.trim()
+          ? parsed.reply.trim()
+          : "";
+      if (!reply) {
+        res.status(200).json({
+          success: false,
+          message: "Eroare OpenAI: răspuns gol.",
+        });
+        return;
+      }
+      riskLevel = normalizeRiskLevel(parsed.riskLevel);
+    } else {
+      reply = raw;
+      riskLevel = null;
+    }
+
+    // Legacy path: no email supplied. Preserve existing behavior and flag it.
+    // Do NOT consume free generations or save to Supabase without an email.
+    if (accessCheckSkipped) {
       res.status(200).json({
         success: true,
-        reply: raw,
-        riskLevel: null,
+        reply,
+        riskLevel,
+        accessCheckSkipped: true,
+        accessCheckReason: "missing_email",
       });
       return;
     }
 
-    const reply =
-      typeof parsed.reply === "string" && parsed.reply.trim()
-        ? parsed.reply.trim()
-        : "";
-    if (!reply) {
-      res.status(200).json({
-        success: false,
-        message: "Eroare OpenAI: răspuns gol.",
-      });
-      return;
-    }
-
-    res.status(200).json({
+    // Authenticated path: the AI response succeeded, so now (and only now)
+    // consume a free generation. consume-free-generation decides server-side
+    // whether to actually consume (never for premium/all-access users).
+    const responsePayload = {
       success: true,
       reply,
-      riskLevel: normalizeRiskLevel(parsed.riskLevel),
+      riskLevel,
+      accessCheck: accessCheckResult,
+      idempotencyKey,
+      chatSessionId,
+    };
+
+    const consume = await callConsumeFreeGeneration({
+      baseUrl: requestBaseUrl,
+      secret: internalSecret,
+      email: normalizedEmail,
+      specialistSlug,
+      chatSessionId,
+      idempotencyKey,
     });
+
+    if (consume.ok && consume.data) {
+      responsePayload.usageConsumption = consume.data;
+    } else {
+      // The AI reply is valid; do not fail the request just because the
+      // consumption call failed. Surface a safe warning instead.
+      console.log(
+        "[v0] specialist-chat consume-free-generation failed:",
+        consume.status,
+        consume.error || JSON.stringify(consume.data || {}).slice(0, 500),
+      );
+      responsePayload.consumptionWarning = true;
+      responsePayload.consumptionError =
+        "Nu am putut actualiza utilizarea. Răspunsul a fost generat.";
+    }
+
+    // --- Dual-write to Supabase public.chat_sessions ---
+    // Wix chathistory stays active in parallel; this mirrors the same chat into
+    // Supabase. A Supabase failure NEVER blocks the AI response.
+    // The incoming conversation already contains the user message; append the
+    // assistant reply (preserving riskLevel).
+    const messagesJson = [
+      ...conversation,
+      {
+        role: "assistant",
+        content: reply,
+        riskLevel: riskLevel || null,
+      },
+    ];
+
+    const chatSave = await saveSpecialistChatToSupabase({
+      email: normalizedEmail,
+      chatSessionId,
+      specialistSlug,
+      specialistName,
+      memberId,
+      messagesJson,
+      assistantReply: reply,
+      idempotencyKey,
+      accessType,
+    });
+
+    responsePayload.chatSessionSaved = chatSave.saved === true;
+    if (!chatSave.saved) {
+      console.log(
+        "[v0] specialist-chat chat_sessions save failed:",
+        chatSave.error,
+      );
+      responsePayload.chatSessionSaveWarning = true;
+      responsePayload.chatSessionSaveError =
+        "Nu am putut salva conversația în Supabase. Răspunsul a fost generat.";
+    }
+
+    res.status(200).json(responsePayload);
   } catch (error) {
     res.status(200).json({
       success: false,
