@@ -11,6 +11,7 @@
 import { TOOLS } from "../tools/tools-config.js";
 import formidable from "formidable";
 import { readFile, unlink } from "node:fs/promises";
+import { randomUUID } from "node:crypto";
 
 // Disable Vercel/Next automatic body parsing so we can read the raw stream for
 // multipart/form-data with formidable. (No effect on plain Vercel functions for
@@ -158,8 +159,87 @@ function setCorsHeaders(res) {
   // Allow the endpoint to be called from your Wix website (and any other origin).
   res.setHeader("Access-Control-Allow-Origin", "*");
   res.setHeader("Access-Control-Allow-Methods", "POST, OPTIONS");
-  res.setHeader("Access-Control-Allow-Headers", "Content-Type, Authorization");
+  res.setHeader(
+    "Access-Control-Allow-Headers",
+    "Content-Type, Authorization, x-iter-secret",
+  );
   res.setHeader("Access-Control-Max-Age", "86400");
+}
+
+// Picks the first non-empty string from a list of candidate values.
+function firstNonEmpty(...candidates) {
+  for (const candidate of candidates) {
+    if (candidate === undefined || candidate === null) continue;
+    const value = String(candidate).trim();
+    if (value) return value;
+  }
+  return "";
+}
+
+// Builds the base URL of the incoming request so internal API calls target the
+// same host/deployment instead of a hardcoded domain.
+function getRequestBaseUrl(req) {
+  const proto = String(req.headers["x-forwarded-proto"] || "https")
+    .split(",")[0]
+    .trim();
+  const host = String(req.headers["x-forwarded-host"] || req.headers.host || "")
+    .split(",")[0]
+    .trim();
+  return host ? `${proto}://${host}` : "";
+}
+
+// Calls the internal POST /api/check-user-access endpoint. Returns
+// { ok, status, data } and never throws.
+async function callCheckUserAccess({ baseUrl, secret, email, categorySlug }) {
+  try {
+    const resp = await fetch(`${baseUrl}/api/check-user-access`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "x-iter-secret": secret,
+      },
+      body: JSON.stringify({ email, categorySlug }),
+    });
+    const data = await resp.json().catch(() => ({}));
+    return { ok: resp.ok, status: resp.status, data };
+  } catch (error) {
+    return { ok: false, status: 0, data: null, error: error?.message || "network error" };
+  }
+}
+
+// Calls the internal POST /api/consume-free-generation endpoint. Returns
+// { ok, status, data } and never throws.
+async function callConsumeFreeGeneration({
+  baseUrl,
+  secret,
+  email,
+  categorySlug,
+  toolSlug,
+  idempotencyKey,
+}) {
+  try {
+    const resp = await fetch(`${baseUrl}/api/consume-free-generation`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "x-iter-secret": secret,
+      },
+      body: JSON.stringify({
+        email,
+        categorySlug,
+        actionType: "tool_generation",
+        toolSlug,
+        idempotencyKey,
+        metadata: {
+          source: "api/generate-tool.js",
+        },
+      }),
+    });
+    const data = await resp.json().catch(() => ({}));
+    return { ok: resp.ok, status: resp.status, data };
+  } catch (error) {
+    return { ok: false, status: 0, data: null, error: error?.message || "network error" };
+  }
 }
 
 // Parses a multipart/form-data request using formidable. Returns { fields, files }.
@@ -340,6 +420,12 @@ export default async function handler(req, res) {
   let improveMode = false;
   let previousResult = "";
   let improvementInstruction = "";
+  // Access / free-trial consumption fields (optional; sent by the frontend).
+  let userEmailRaw = "";
+  let toolSlugRaw = "";
+  let idempotencyKeyRaw = "";
+  // Category from access-specific body fields (falls back to categorySlug).
+  let accessCategoryRaw = "";
 
   const contentType = String(req.headers["content-type"] || "").toLowerCase();
 
@@ -350,6 +436,29 @@ export default async function handler(req, res) {
 
       toolId = String(firstValue(fields.toolId) || "").trim();
       categorySlug = String(firstValue(fields.categorySlug) || "").trim();
+
+      // Access / free-trial fields (optional).
+      userEmailRaw = firstNonEmpty(
+        firstValue(fields.email),
+        firstValue(fields.userEmail),
+        firstValue(fields.memberEmail),
+        firstValue(fields.clientEmail),
+      );
+      accessCategoryRaw = firstNonEmpty(
+        firstValue(fields.categorySlug),
+        firstValue(fields.category),
+        firstValue(fields.categoryId),
+      );
+      toolSlugRaw = firstNonEmpty(
+        firstValue(fields.toolSlug),
+        firstValue(fields.toolId),
+        firstValue(fields.slug),
+      );
+      idempotencyKeyRaw = firstNonEmpty(
+        firstValue(fields.idempotencyKey),
+        firstValue(fields.generationRequestId),
+        firstValue(fields.requestId),
+      );
 
       // Improve mode fields (optional).
       const improveRaw = firstValue(fields.improveMode);
@@ -422,6 +531,25 @@ export default async function handler(req, res) {
     toolId = typeof body.toolId === "string" ? body.toolId.trim() : "";
     categorySlug =
       typeof body.categorySlug === "string" ? body.categorySlug.trim() : "";
+
+    // Access / free-trial fields (optional).
+    userEmailRaw = firstNonEmpty(
+      body.email,
+      body.userEmail,
+      body.memberEmail,
+      body.clientEmail,
+    );
+    accessCategoryRaw = firstNonEmpty(
+      body.categorySlug,
+      body.category,
+      body.categoryId,
+    );
+    toolSlugRaw = firstNonEmpty(body.toolSlug, body.toolId, body.slug);
+    idempotencyKeyRaw = firstNonEmpty(
+      body.idempotencyKey,
+      body.generationRequestId,
+      body.requestId,
+    );
 
     // Improve mode fields (optional).
     improveMode = body.improveMode === true || body.improveMode === "true";
@@ -515,6 +643,93 @@ export default async function handler(req, res) {
       message: "OpenAI error: OPENAI_API_KEY is not set.",
     });
     return;
+  }
+
+  // --- Access control + free-trial consumption setup ---
+  // These are resolved once here and reused for the response and, on success,
+  // the consume-free-generation call.
+  const normalizedEmail = userEmailRaw.trim().toLowerCase();
+  const resolvedCategorySlug = firstNonEmpty(accessCategoryRaw, categorySlug);
+  const resolvedToolSlug = firstNonEmpty(toolSlugRaw, toolId);
+  // Prefer a frontend-supplied idempotency key; otherwise generate a stable
+  // fallback per request so consume-free-generation stays idempotent.
+  const idempotencyKey = idempotencyKeyRaw || randomUUID();
+  const internalSecret = process.env.ITER_INTERNAL_API_SECRET;
+  const requestBaseUrl = getRequestBaseUrl(req);
+
+  // When no email is provided, keep the legacy behavior intact (temporary,
+  // until the Wix frontend sends the user email). We record why the check was
+  // skipped and continue generation as before.
+  const accessCheckSkipped = !normalizedEmail;
+  // Populated after a successful access check; included in the response.
+  let accessCheckResult = null;
+
+  if (!accessCheckSkipped) {
+    // With an email present, categorySlug becomes required.
+    if (!resolvedCategorySlug) {
+      res.status(400).json({
+        success: false,
+        message: "Lipsește categorySlug.",
+      });
+      return;
+    }
+    // toolSlug should always be inferable from toolId; guard just in case.
+    if (!resolvedToolSlug) {
+      res.status(400).json({
+        success: false,
+        message: "Lipsește toolSlug.",
+      });
+      return;
+    }
+    if (!internalSecret) {
+      res.status(500).json({
+        success: false,
+        message: "Server misconfiguration: internal secret is not set.",
+      });
+      return;
+    }
+    if (!requestBaseUrl) {
+      res.status(500).json({
+        success: false,
+        message: "Server misconfiguration: could not resolve request host.",
+      });
+      return;
+    }
+
+    const accessCheck = await callCheckUserAccess({
+      baseUrl: requestBaseUrl,
+      secret: internalSecret,
+      email: normalizedEmail,
+      categorySlug: resolvedCategorySlug,
+    });
+
+    if (!accessCheck.ok || !accessCheck.data) {
+      console.log(
+        "[v0] generate-tool access check failed:",
+        accessCheck.status,
+        accessCheck.error || JSON.stringify(accessCheck.data || {}).slice(0, 500),
+      );
+      res.status(502).json({
+        success: false,
+        message: "Nu am putut verifica accesul. Te rugăm să încerci din nou.",
+      });
+      return;
+    }
+
+    accessCheckResult = accessCheck.data;
+
+    if (accessCheck.data.hasAccess !== true) {
+      // No paid access and no free generations: stop before calling OpenAI.
+      res.status(402).json({
+        success: false,
+        hasAccess: false,
+        shouldRedirectToCheckout: true,
+        reason: accessCheck.data.reason,
+        freeGenerations: accessCheck.data.freeGenerations,
+        message: "No access available. Please upgrade to continue.",
+      });
+      return;
+    }
   }
 
   // Format the user input clearly for the model (only the tool's relevant fields).
@@ -800,11 +1015,54 @@ Instrucțiuni de formatare:
       return;
     }
 
-    res.status(200).json({
+    // Legacy path: no email supplied. Preserve existing behavior and flag it.
+    if (accessCheckSkipped) {
+      res.status(200).json({
+        success: true,
+        toolId: tool.toolId,
+        result,
+        accessCheckSkipped: true,
+        accessCheckReason: "missing_email",
+      });
+      return;
+    }
+
+    // Authenticated path: the AI response succeeded, so now (and only now)
+    // consume a free generation. This never consumes for premium/paid-category
+    // users -- consume-free-generation decides that server-side.
+    const responsePayload = {
       success: true,
       toolId: tool.toolId,
       result,
+      accessCheck: accessCheckResult,
+      idempotencyKey,
+    };
+
+    const consume = await callConsumeFreeGeneration({
+      baseUrl: requestBaseUrl,
+      secret: internalSecret,
+      email: normalizedEmail,
+      categorySlug: resolvedCategorySlug,
+      toolSlug: resolvedToolSlug,
+      idempotencyKey,
     });
+
+    if (consume.ok && consume.data) {
+      responsePayload.usageConsumption = consume.data;
+    } else {
+      // The AI result is valid; do not fail the request just because the
+      // consumption call failed. Surface a safe warning instead.
+      console.log(
+        "[v0] generate-tool consume-free-generation failed:",
+        consume.status,
+        consume.error || JSON.stringify(consume.data || {}).slice(0, 500),
+      );
+      responsePayload.consumptionWarning = true;
+      responsePayload.consumptionError =
+        "Nu am putut actualiza utilizarea. Rezultatul a fost generat.";
+    }
+
+    res.status(200).json(responsePayload);
   } catch (error) {
     console.log("[v0] generate-tool unexpected error:", error?.message);
     res.status(200).json({
