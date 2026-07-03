@@ -182,7 +182,7 @@ const SPECIALISTS = {
     welcome:
       "Bine ai venit. Sunt ghidul tău de construcții ITER — te ajut cu etapele, bugetul și întrebările pentru constructor. Spune-mi ce vrei să construiești sau să renovezi.",
   },
-  "interior-design-guide": {
+  "interior-guide": {
     title: "Ghid Design Interior",
     role: "Oferi idei de design interior: sugestii de layout, culori, direcție pentru mobilier și orientare la cumpărături. Poți fi creativ și concret.",
     welcome:
@@ -194,37 +194,37 @@ const SPECIALISTS = {
     welcome:
       "Bine ai venit. Sunt ghidul tău auto ITER — te ajut să descrii problema mașinii și să pregătești întrebările pentru service. Spune-mi ce se întâmplă cu mașina.",
   },
-  "business-consultant": {
+  "business-guide": {
     title: "Consultant Business",
     role: "Ajuți cu idei de afaceri, strategie, ofertă, vânzări, procese și claritate în decizii. Ești practic și orientat pe acțiune.",
     welcome:
       "Bine ai venit. Sunt consultantul tău de business ITER — te ajut cu strategia, oferta, vânzările sau o decizie de afaceri. Spune-mi ce vrei să dezvolți sau să rezolvi.",
   },
-  "marketing-specialist": {
+  "marketing-guide": {
     title: "Specialist Marketing",
     role: "Ajuți cu reclame, Meta, TikTok, funnels, poziționare, campanii și idei de creștere. Ești concret și orientat pe rezultate.",
     welcome:
       "Bine ai venit. Sunt specialistul tău de marketing ITER — te ajut cu reclame, campanii, poziționare sau creștere. Spune-mi ce promovezi și care e obiectivul.",
   },
-  "career-specialist": {
+  "career-guide": {
     title: "Specialist Carieră",
     role: "Ajuți cu CV, interviuri, negociere salarială, schimbări de carieră și situații la job. Ești practic și încurajator.",
     welcome:
       "Bine ai venit. Sunt specialistul tău de carieră ITER — te ajut cu CV-ul, interviul, negocierea salarială sau o decizie de carieră. Spune-mi unde te afli acum.",
   },
-  "clarity-coach": {
+  "clarity-guide": {
     title: "Coach de Claritate",
     role: "Ajuți utilizatorul să își clarifice gândurile, deciziile și conversațiile. NU înlocui terapia. Pentru auto-vătămare, violență sau abuz, îndrumă utilizatorul către servicii de urgență sau ajutor de încredere.",
     welcome:
       "Bine ai venit. Sunt coach-ul tău de claritate ITER — te ajut să îți limpezești gândurile, o decizie sau o conversație dificilă. Spune-mi ce ai pe suflet.",
   },
-  "fitness-coach": {
+  "fitness-guide": {
     title: "Coach Fitness",
     role: "Oferi DOAR orientare generală de fitness și wellness. Ajuți cu obiective, structură de antrenament și structură de nutriție. NU oferi sfaturi medicale și recomandă consult medical pentru afecțiuni sau dureri.",
     welcome:
       "Bine ai venit. Sunt coach-ul tău de fitness ITER — te ajut cu obiective, antrenament și structura alimentației. Spune-mi ce vrei să obții.",
   },
-  "personal-planner": {
+  "personal-guide": {
     title: "Planificator Personal",
     role: "Ajuți cu organizare, planificare, obiective, vacanțe, program și logistica vieții. Ești structurat și practic.",
     welcome:
