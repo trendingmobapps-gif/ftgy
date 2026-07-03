@@ -14,6 +14,8 @@
 //      including when the user submits answers via `structuredAnswers`.
 // Every response has the shape { success, reply, recommendedTool, followUpFields }.
 
+import { randomUUID } from "node:crypto";
+
 // Single message returned for any unsafe / non-family-friendly request, whether
 // it is caught by the local blocklist or the OpenAI moderation API.
 const UNSAFE_MESSAGE =
@@ -272,7 +274,96 @@ const CATEGORIES = {
 function setCorsHeaders(res) {
   res.setHeader("Access-Control-Allow-Origin", "*");
   res.setHeader("Access-Control-Allow-Methods", "POST, OPTIONS");
-  res.setHeader("Access-Control-Allow-Headers", "Content-Type");
+  res.setHeader(
+    "Access-Control-Allow-Headers",
+    "Content-Type, Authorization, x-iter-secret",
+  );
+}
+
+// Picks the first non-empty string from a list of candidate values.
+function firstNonEmpty(...candidates) {
+  for (const candidate of candidates) {
+    if (candidate === undefined || candidate === null) continue;
+    const value = String(candidate).trim();
+    if (value) return value;
+  }
+  return "";
+}
+
+// Builds the base URL of the incoming request so internal API calls target the
+// same host/deployment instead of a hardcoded domain.
+function getRequestBaseUrl(req) {
+  const proto = String(req.headers["x-forwarded-proto"] || "https")
+    .split(",")[0]
+    .trim();
+  const host = String(req.headers["x-forwarded-host"] || req.headers.host || "")
+    .split(",")[0]
+    .trim();
+  return host ? `${proto}://${host}` : "";
+}
+
+// Calls the internal POST /api/check-user-access endpoint. Returns
+// { ok, status, data } and never throws.
+async function callCheckUserAccess({ baseUrl, secret, email, categorySlug }) {
+  try {
+    const resp = await fetch(`${baseUrl}/api/check-user-access`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "x-iter-secret": secret,
+      },
+      body: JSON.stringify({ email, categorySlug }),
+    });
+    const data = await resp.json().catch(() => ({}));
+    return { ok: resp.ok, status: resp.status, data };
+  } catch (error) {
+    return {
+      ok: false,
+      status: 0,
+      data: null,
+      error: error?.message || "network error",
+    };
+  }
+}
+
+// Calls the internal POST /api/consume-free-generation endpoint. Returns
+// { ok, status, data } and never throws.
+async function callConsumeFreeGeneration({
+  baseUrl,
+  secret,
+  email,
+  categorySlug,
+  chatSessionId,
+  idempotencyKey,
+}) {
+  try {
+    const resp = await fetch(`${baseUrl}/api/consume-free-generation`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "x-iter-secret": secret,
+      },
+      body: JSON.stringify({
+        email,
+        categorySlug,
+        actionType: "category_chat",
+        chatSessionId,
+        idempotencyKey,
+        metadata: {
+          source: "api/category-chat.js",
+        },
+      }),
+    });
+    const data = await resp.json().catch(() => ({}));
+    return { ok: resp.ok, status: resp.status, data };
+  } catch (error) {
+    return {
+      ok: false,
+      status: 0,
+      data: null,
+      error: error?.message || "network error",
+    };
+  }
 }
 
 export default async function handler(req, res) {
@@ -313,6 +404,35 @@ export default async function handler(req, res) {
   const conversation = Array.isArray(body.conversation)
     ? body.conversation
     : [];
+
+  // Access / free-trial consumption fields (optional; sent by the frontend).
+  const normalizedEmail = firstNonEmpty(
+    body.email,
+    body.userEmail,
+    body.memberEmail,
+    body.clientEmail,
+  )
+    .toLowerCase();
+  // Category can arrive under several field names; fall back to categorySlug.
+  const accessCategorySlug = firstNonEmpty(
+    body.categorySlug,
+    body.category,
+    body.categoryId,
+    categorySlug,
+  );
+  // Prefer a frontend-supplied chat session id; otherwise generate a fallback.
+  const chatSessionId =
+    firstNonEmpty(body.chatSessionId, body.sessionId, body.conversationId) ||
+    randomUUID();
+  // Prefer a frontend-supplied idempotency key; otherwise generate a fallback so
+  // consume-free-generation stays idempotent per request.
+  const idempotencyKey =
+    firstNonEmpty(
+      body.idempotencyKey,
+      body.messageId,
+      body.chatMessageId,
+      body.requestId,
+    ) || randomUUID();
 
   // Answers submitted by the user for previously-asked follow-up fields.
   const structuredAnswers =
@@ -432,6 +552,78 @@ export default async function handler(req, res) {
       message: "OPENAI_API_KEY nu este setat în mediul Vercel.",
     });
     return;
+  }
+
+  // --- Access control + free-trial consumption setup ---
+  const internalSecret = process.env.ITER_INTERNAL_API_SECRET;
+  const requestBaseUrl = getRequestBaseUrl(req);
+
+  // When no email is provided, keep the legacy behavior intact (temporary,
+  // until the Wix frontend sends the user email). We flag why the check was
+  // skipped and continue the chat flow exactly as before.
+  const accessCheckSkipped = !normalizedEmail;
+  // Populated after a successful access check; included in the response.
+  let accessCheckResult = null;
+
+  if (!accessCheckSkipped) {
+    // With an email present, categorySlug becomes required.
+    if (!accessCategorySlug) {
+      res.status(400).json({
+        success: false,
+        message: "Lipsește categorySlug.",
+      });
+      return;
+    }
+    if (!internalSecret) {
+      res.status(500).json({
+        success: false,
+        message: "Server misconfiguration: internal secret is not set.",
+      });
+      return;
+    }
+    if (!requestBaseUrl) {
+      res.status(500).json({
+        success: false,
+        message: "Server misconfiguration: could not resolve request host.",
+      });
+      return;
+    }
+
+    const accessCheck = await callCheckUserAccess({
+      baseUrl: requestBaseUrl,
+      secret: internalSecret,
+      email: normalizedEmail,
+      categorySlug: accessCategorySlug,
+    });
+
+    if (!accessCheck.ok || !accessCheck.data) {
+      console.log(
+        "[v0] category-chat access check failed:",
+        accessCheck.status,
+        accessCheck.error ||
+          JSON.stringify(accessCheck.data || {}).slice(0, 500),
+      );
+      res.status(502).json({
+        success: false,
+        message: "Nu am putut verifica accesul. Te rugăm să încerci din nou.",
+      });
+      return;
+    }
+
+    accessCheckResult = accessCheck.data;
+
+    if (accessCheck.data.hasAccess !== true) {
+      // No paid access and no free generations: stop before calling OpenAI.
+      res.status(402).json({
+        success: false,
+        hasAccess: false,
+        shouldRedirectToCheckout: true,
+        reason: accessCheck.data.reason,
+        freeGenerations: accessCheck.data.freeGenerations,
+        message: "No access available. Please upgrade to continue.",
+      });
+      return;
+    }
   }
 
   try {
@@ -714,12 +906,56 @@ toolId trebuie să fie identic cu unul din listă.`;
       // Not valid JSON: use the raw content as the reply, no recommendation.
     }
 
-    res.status(200).json({
+    // Legacy path: no email supplied. Preserve existing behavior and flag it.
+    if (accessCheckSkipped) {
+      res.status(200).json({
+        success: true,
+        reply,
+        recommendedTool,
+        followUpFields,
+        accessCheckSkipped: true,
+        accessCheckReason: "missing_email",
+      });
+      return;
+    }
+
+    // Authenticated path: the AI response succeeded, so now (and only now)
+    // consume a free generation. consume-free-generation decides server-side
+    // whether to actually consume (never for premium/paid-category users).
+    const responsePayload = {
       success: true,
       reply,
       recommendedTool,
       followUpFields,
+      accessCheck: accessCheckResult,
+      idempotencyKey,
+    };
+
+    const consume = await callConsumeFreeGeneration({
+      baseUrl: requestBaseUrl,
+      secret: internalSecret,
+      email: normalizedEmail,
+      categorySlug: accessCategorySlug,
+      chatSessionId,
+      idempotencyKey,
     });
+
+    if (consume.ok && consume.data) {
+      responsePayload.usageConsumption = consume.data;
+    } else {
+      // The AI reply is valid; do not fail the request just because the
+      // consumption call failed. Surface a safe warning instead.
+      console.log(
+        "[v0] category-chat consume-free-generation failed:",
+        consume.status,
+        consume.error || JSON.stringify(consume.data || {}).slice(0, 500),
+      );
+      responsePayload.consumptionWarning = true;
+      responsePayload.consumptionError =
+        "Nu am putut actualiza utilizarea. Răspunsul a fost generat.";
+    }
+
+    res.status(200).json(responsePayload);
   } catch (err) {
     res.status(200).json({
       success: false,
