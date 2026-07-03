@@ -334,30 +334,6 @@ function getRequestBaseUrl(req) {
   return host ? `${proto}://${host}` : "";
 }
 
-// Calls the internal POST /api/check-user-access endpoint. Returns
-// { ok, status, data } and never throws.
-async function callCheckUserAccess({ baseUrl, secret, email, categorySlug }) {
-  try {
-    const resp = await fetch(`${baseUrl}/api/check-user-access`, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        "x-iter-secret": secret,
-      },
-      body: JSON.stringify({ email, categorySlug }),
-    });
-    const data = await resp.json().catch(() => ({}));
-    return { ok: resp.ok, status: resp.status, data };
-  } catch (error) {
-    return {
-      ok: false,
-      status: 0,
-      data: null,
-      error: error?.message || "network error",
-    };
-  }
-}
-
 // Calls the internal POST /api/consume-free-generation endpoint. Returns
 // { ok, status, data } and never throws.
 async function callConsumeFreeGeneration({
@@ -578,6 +554,200 @@ async function saveSpecialistChatToSupabase({
   }
 }
 
+// Resolves specialist-chat access DIRECTLY against Supabase (no internal HTTP
+// hop). Specialist chat is independent from the 8 tool categories:
+//   - categorySlug is never required or used.
+//   - Only premium / all access counts as paid access.
+//   - Category-only access does NOT count as paid access here.
+//   - Free users may use free generations.
+// Returns one of:
+//   { internalError: true, errorCode, errorMessage }        -> true server error
+//   { internalError: false, access: { ...accessShape } }    -> resolved access
+// NEVER throws and NEVER exposes secrets.
+async function resolveSpecialistAccess({ email }) {
+  const baseUrl = process.env.SUPABASE_URL;
+  // Support either secret key name; use whichever exists.
+  const secretKey =
+    process.env.SUPABASE_SECRET_KEY || process.env.SUPABASE_SERVICE_ROLE_KEY;
+
+  if (!baseUrl || !secretKey) {
+    return {
+      internalError: true,
+      errorCode: "missing_supabase_env",
+      errorMessage: "Supabase environment is not configured.",
+    };
+  }
+
+  try {
+    const nowMs = Date.now();
+
+    // 1. Find the profile by email.
+    const profileLookup = await supabaseSelect({
+      baseUrl,
+      secretKey,
+      table: "profiles",
+      query: `email=eq.${encodeURIComponent(email)}&select=*&limit=1`,
+    });
+
+    if (!profileLookup.ok) {
+      return {
+        internalError: true,
+        errorCode: "profile_query_failed",
+        errorMessage: "Could not query the profiles table.",
+      };
+    }
+
+    const profile =
+      Array.isArray(profileLookup.data) && profileLookup.data.length > 0
+        ? profileLookup.data[0]
+        : null;
+
+    // Profile not found: treat like no access (not an internal error).
+    if (!profile) {
+      return {
+        internalError: false,
+        access: {
+          success: true,
+          email,
+          hasAccess: false,
+          accessType: null,
+          shouldRedirectToCheckout: true,
+          reason: "profile_not_found",
+          freeGenerations: 0,
+        },
+      };
+    }
+
+    // 2. Fetch active user_access rows for this email.
+    const accessLookup = await supabaseSelect({
+      baseUrl,
+      secretKey,
+      table: "user_access",
+      query: `email=eq.${encodeURIComponent(
+        email,
+      )}&status=eq.active&select=*`,
+    });
+
+    if (!accessLookup.ok) {
+      return {
+        internalError: true,
+        errorCode: "access_query_failed",
+        errorMessage: "Could not query the user_access table.",
+      };
+    }
+
+    const accessRows = Array.isArray(accessLookup.data)
+      ? accessLookup.data
+      : [];
+    // Active = status active AND (no expiry OR expiry in the future).
+    const activeRows = accessRows.filter((row) => {
+      if (!row || row.status !== "active") return false;
+      if (!row.expires_at) return true;
+      const t = new Date(row.expires_at).getTime();
+      return Number.isNaN(t) ? true : t > nowMs;
+    });
+
+    // Premium: access_scope = "all" OR plan = "premium".
+    // Category-only access is intentionally ignored for specialist chat.
+    const isPremium = activeRows.some(
+      (row) => row.access_scope === "all" || row.plan === "premium",
+    );
+
+    if (isPremium) {
+      return {
+        internalError: false,
+        access: {
+          success: true,
+          email,
+          hasAccess: true,
+          accessType: "premium",
+          shouldRedirectToCheckout: false,
+          reason: "premium_access",
+          freeGenerations: null,
+        },
+      };
+    }
+
+    // 3. Not premium: check free generations via usage_limits
+    //    (by profile_id first, then by email as a fallback).
+    let usageRow = null;
+
+    if (profile.id) {
+      const byProfile = await supabaseSelect({
+        baseUrl,
+        secretKey,
+        table: "usage_limits",
+        query: `profile_id=eq.${encodeURIComponent(
+          profile.id,
+        )}&select=*&limit=1`,
+      });
+      if (
+        byProfile.ok &&
+        Array.isArray(byProfile.data) &&
+        byProfile.data.length > 0
+      ) {
+        usageRow = byProfile.data[0];
+      }
+    }
+
+    if (!usageRow) {
+      const byEmail = await supabaseSelect({
+        baseUrl,
+        secretKey,
+        table: "usage_limits",
+        query: `email=eq.${encodeURIComponent(email)}&select=*&limit=1`,
+      });
+      if (
+        byEmail.ok &&
+        Array.isArray(byEmail.data) &&
+        byEmail.data.length > 0
+      ) {
+        usageRow = byEmail.data[0];
+      }
+    }
+
+    const remaining =
+      usageRow && Number.isFinite(Number(usageRow.free_generations_remaining))
+        ? Number(usageRow.free_generations_remaining)
+        : 0;
+
+    if (remaining > 0) {
+      return {
+        internalError: false,
+        access: {
+          success: true,
+          email,
+          hasAccess: true,
+          accessType: "free_trial",
+          shouldRedirectToCheckout: false,
+          reason: "free_trial_available",
+          freeGenerations: remaining,
+        },
+      };
+    }
+
+    // No paid access and no free generations left.
+    return {
+      internalError: false,
+      access: {
+        success: true,
+        email,
+        hasAccess: false,
+        accessType: null,
+        shouldRedirectToCheckout: true,
+        reason: "no_paid_access_and_no_free_generations",
+        freeGenerations: 0,
+      },
+    };
+  } catch (error) {
+    return {
+      internalError: true,
+      errorCode: "access_check_internal_error",
+      errorMessage: error?.message || "Unexpected error during access check.",
+    };
+  }
+}
+
 export default async function handler(req, res) {
   setCorsHeaders(res);
 
@@ -708,7 +878,8 @@ export default async function handler(req, res) {
     return;
   }
 
-  // --- Access control + free-trial consumption setup ---
+  // --- Access control (direct Supabase check) + free-trial consumption setup ---
+  // The consumption call after OpenAI still uses these (non-fatal if missing).
   const internalSecret = process.env.ITER_INTERNAL_API_SECRET;
   const requestBaseUrl = getRequestBaseUrl(req);
 
@@ -722,56 +893,41 @@ export default async function handler(req, res) {
   let accessType = null;
 
   if (!accessCheckSkipped) {
-    if (!internalSecret) {
-      res.status(200).json({
-        success: false,
-        message: "Server misconfiguration: internal secret is not set.",
-      });
-      return;
-    }
-    if (!requestBaseUrl) {
-      res.status(200).json({
-        success: false,
-        message: "Server misconfiguration: could not resolve request host.",
-      });
-      return;
-    }
+    // Direct Supabase access check (no internal HTTP hop). Specialist chat does
+    // NOT use categorySlug, and only premium/all access counts as paid access.
+    const resolved = await resolveSpecialistAccess({ email: normalizedEmail });
 
-    // Specialist chat is independent from the 8 tool categories, so we do NOT
-    // send a categorySlug: consume-free-generation only counts premium/all
-    // access as paid for specialist_chat (category-only access does not count).
-    const accessCheck = await callCheckUserAccess({
-      baseUrl: requestBaseUrl,
-      secret: internalSecret,
-      email: normalizedEmail,
-      categorySlug: null,
-    });
-
-    if (!accessCheck.ok || !accessCheck.data) {
-      console.log(
-        "[v0] specialist-chat access check failed:",
-        accessCheck.status,
-        accessCheck.error ||
-          JSON.stringify(accessCheck.data || {}).slice(0, 500),
+    if (resolved.internalError) {
+      // TRUE internal error only (missing env / query failure / unexpected
+      // throw). Log the real cause to Vercel; return a safe message + code.
+      console.error(
+        "[v0] specialist-chat access check internal error:",
+        resolved.errorCode,
+        resolved.errorMessage,
       );
       res.status(200).json({
         success: false,
         message: "Nu am putut verifica accesul. Te rugăm să încerci din nou.",
+        accessCheckErrorCode: resolved.errorCode,
+        accessCheckErrorMessage: resolved.errorMessage,
       });
       return;
     }
 
-    accessCheckResult = accessCheck.data;
-    accessType = accessCheck.data.accessType || null;
+    // Attach specialistSlug to the access result for the success response.
+    accessCheckResult = { ...resolved.access, specialistSlug };
+    accessType = resolved.access.accessType || null;
 
-    if (accessCheck.data.hasAccess !== true) {
-      // No paid access and no free generations: stop before calling OpenAI.
+    if (resolved.access.hasAccess !== true) {
+      // Normal no-access case (no premium and no free generations): do NOT call
+      // OpenAI. This is NOT an internal error, so no generic error message.
       res.status(402).json({
         success: false,
         hasAccess: false,
         shouldRedirectToCheckout: true,
-        reason: "no_paid_access_and_no_free_generations",
-        freeGenerations: accessCheck.data.freeGenerations,
+        reason:
+          resolved.access.reason || "no_paid_access_and_no_free_generations",
+        freeGenerations: resolved.access.freeGenerations,
         message: "No access available. Please upgrade to continue.",
       });
       return;
