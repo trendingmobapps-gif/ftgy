@@ -366,6 +366,186 @@ async function callConsumeFreeGeneration({
   }
 }
 
+// --- Supabase REST helpers (chat_sessions dual-write) ---
+// These talk directly to the Supabase REST API using the same conventions as
+// the other endpoints in this project. They never throw.
+
+// Select rows from a Supabase table using a filtered GET query.
+async function supabaseSelect({ baseUrl, secretKey, table, query }) {
+  try {
+    const resp = await fetch(`${baseUrl}/rest/v1/${table}?${query}`, {
+      method: "GET",
+      headers: {
+        apikey: secretKey,
+        Authorization: `Bearer ${secretKey}`,
+        "Content-Type": "application/json",
+      },
+    });
+    const text = await resp.text();
+    let data;
+    try {
+      data = text ? JSON.parse(text) : null;
+    } catch {
+      data = text;
+    }
+    return { ok: resp.ok, status: resp.status, data };
+  } catch (error) {
+    return {
+      ok: false,
+      status: 0,
+      data: null,
+      error: error?.message || "network error",
+    };
+  }
+}
+
+// Upsert a row into a Supabase table (merge on the given conflict column).
+async function supabaseUpsert({ baseUrl, secretKey, table, row, onConflict }) {
+  try {
+    const url = `${baseUrl}/rest/v1/${table}?on_conflict=${encodeURIComponent(
+      onConflict,
+    )}`;
+    const resp = await fetch(url, {
+      method: "POST",
+      headers: {
+        apikey: secretKey,
+        Authorization: `Bearer ${secretKey}`,
+        "Content-Type": "application/json",
+        Prefer: "resolution=merge-duplicates,return=representation",
+      },
+      body: JSON.stringify(row),
+    });
+    const text = await resp.text();
+    let data;
+    try {
+      data = text ? JSON.parse(text) : null;
+    } catch {
+      data = text;
+    }
+    return { ok: resp.ok, status: resp.status, data };
+  } catch (error) {
+    return {
+      ok: false,
+      status: 0,
+      data: null,
+      error: error?.message || "network error",
+    };
+  }
+}
+
+// Dual-write the completed chat into public.chat_sessions. Returns
+// { saved, error } and NEVER throws, so a Supabase failure can never break the
+// AI response. Wix chathistory remains the source of truth in parallel.
+async function saveChatSessionToSupabase({
+  email,
+  chatSessionId,
+  categorySlug,
+  categoryName,
+  memberId,
+  tools,
+  messagesJson,
+  assistantReply,
+  idempotencyKey,
+  accessType,
+}) {
+  const baseUrl = process.env.SUPABASE_URL;
+  const secretKey = process.env.SUPABASE_SECRET_KEY;
+
+  if (!baseUrl || !secretKey) {
+    return { saved: false, error: "Supabase is not configured." };
+  }
+
+  try {
+    // Look up profile_id by email (best-effort; never fatal).
+    let profileId = null;
+    const profileLookup = await supabaseSelect({
+      baseUrl,
+      secretKey,
+      table: "profiles",
+      query: `email=eq.${encodeURIComponent(email)}&select=id&limit=1`,
+    });
+    if (
+      profileLookup.ok &&
+      Array.isArray(profileLookup.data) &&
+      profileLookup.data.length > 0
+    ) {
+      profileId = profileLookup.data[0].id || null;
+    }
+
+    // Preserve an existing chat_title if this session already exists.
+    let existingTitle = null;
+    const existing = await supabaseSelect({
+      baseUrl,
+      secretKey,
+      table: "chat_sessions",
+      query: `wix_item_id=eq.${encodeURIComponent(
+        chatSessionId,
+      )}&select=chat_title&limit=1`,
+    });
+    if (
+      existing.ok &&
+      Array.isArray(existing.data) &&
+      existing.data.length > 0 &&
+      existing.data[0].chat_title
+    ) {
+      existingTitle = existing.data[0].chat_title;
+    }
+
+    const preview =
+      typeof assistantReply === "string"
+        ? assistantReply.slice(0, 100)
+        : "";
+
+    const row = {
+      email,
+      wix_item_id: chatSessionId,
+      member_id: memberId || null,
+      chat_type: "category",
+      category_slug: categorySlug || null,
+      category_name: categoryName || null,
+      chat_title: existingTitle || `Chat - ${categorySlug || "general"}`,
+      messages_json: Array.isArray(messagesJson) ? messagesJson : [],
+      tools_json: Array.isArray(tools) ? tools : [],
+      last_message_preview: preview,
+      source: "vercel",
+      metadata: {
+        source: "api/category-chat.js",
+        lastIdempotencyKey: idempotencyKey || null,
+        accessType: accessType || null,
+        updatedFrom: "category_chat",
+      },
+      updated_at: new Date().toISOString(),
+    };
+    // Only set profile_id when we actually found one, so we never overwrite an
+    // existing linkage with null.
+    if (profileId) {
+      row.profile_id = profileId;
+    }
+
+    const result = await supabaseUpsert({
+      baseUrl,
+      secretKey,
+      table: "chat_sessions",
+      row,
+      onConflict: "wix_item_id",
+    });
+
+    if (!result.ok) {
+      return {
+        saved: false,
+        error: "Supabase chat_sessions upsert failed.",
+      };
+    }
+
+    return { saved: true, error: null };
+  } catch (error) {
+    return {
+      saved: false,
+      error: error?.message || "Unexpected error saving chat session.",
+    };
+  }
+}
+
 export default async function handler(req, res) {
   setCorsHeaders(res);
 
@@ -433,6 +613,8 @@ export default async function handler(req, res) {
       body.chatMessageId,
       body.requestId,
     ) || randomUUID();
+  // Optional Wix member id, used for the chat_sessions dual-write.
+  const memberId = firstNonEmpty(body.memberId, body.wixMemberId) || null;
 
   // Answers submitted by the user for previously-asked follow-up fields.
   const structuredAnswers =
@@ -958,6 +1140,46 @@ toolId trebuie să fie identic cu unul din listă.`;
       responsePayload.consumptionWarning = true;
       responsePayload.consumptionError =
         "Nu am putut actualiza utilizarea. Răspunsul a fost generat.";
+    }
+
+    // --- Dual-write to Supabase public.chat_sessions ---
+    // Wix chathistory stays active in parallel; this mirrors the same chat into
+    // Supabase. A Supabase failure NEVER blocks the AI response.
+    // The incoming conversation already contains the user message; append the
+    // assistant reply (with any recommended tool / follow-up fields).
+    const messagesJson = [
+      ...conversation,
+      {
+        role: "assistant",
+        content: reply,
+        recommendedTool: recommendedTool || null,
+        followUpFields: followUpFields || null,
+      },
+    ];
+
+    const chatSave = await saveChatSessionToSupabase({
+      email: normalizedEmail,
+      chatSessionId,
+      categorySlug: accessCategorySlug,
+      categoryName: category.name || null,
+      memberId,
+      tools: normalizedTools,
+      messagesJson,
+      assistantReply: reply,
+      idempotencyKey,
+      accessType: accessCheckResult ? accessCheckResult.accessType : null,
+    });
+
+    responsePayload.chatSessionSaved = chatSave.saved === true;
+    responsePayload.chatSessionId = chatSessionId;
+    if (!chatSave.saved) {
+      console.log(
+        "[v0] category-chat chat_sessions save failed:",
+        chatSave.error,
+      );
+      responsePayload.chatSessionSaveWarning = true;
+      responsePayload.chatSessionSaveError =
+        "Nu am putut salva conversația în Supabase. Răspunsul a fost generat.";
     }
 
     res.status(200).json(responsePayload);
