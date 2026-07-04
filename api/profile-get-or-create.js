@@ -184,11 +184,21 @@ export default async function handler(req, res) {
     typeof body.fullName === "string" && body.fullName.trim()
       ? body.fullName.trim()
       : null;
+  // Optional fields from Supabase Auth (e.g. Google login).
+  const avatarUrl =
+    typeof body.avatarUrl === "string" && body.avatarUrl.trim()
+      ? body.avatarUrl.trim()
+      : null;
+  const supabaseUserId =
+    typeof body.supabaseUserId === "string" && body.supabaseUserId.trim()
+      ? body.supabaseUserId.trim()
+      : null;
   const allowedCreatedFrom = [
     "wix_member",
     "purchase",
     "mobile",
     "manual",
+    "supabase_auth",
     "unknown",
   ];
   const createdFrom =
@@ -197,26 +207,68 @@ export default async function handler(req, res) {
       ? body.createdFrom
       : "unknown";
 
-  const hasAccount = createdFrom === "wix_member" || createdFrom === "mobile";
+  // A user that reaches this endpoint via an authenticated session has an
+  // account. Once true, has_account is never downgraded below.
+  const hasAccount =
+    createdFrom === "wix_member" ||
+    createdFrom === "mobile" ||
+    createdFrom === "supabase_auth";
 
   // Normalize base URL (strip trailing slash).
   const normalizedBaseUrl = baseUrl.replace(/\/+$/, "");
   const nowIso = new Date().toISOString();
 
   try {
-    // 1. Upsert the profile (keyed by email).
+    // 0. Fetch the existing profile (if any) so we can merge without
+    //    overwriting existing values with empty/null.
+    const existingProfileLookup = await supabaseSelect({
+      baseUrl: normalizedBaseUrl,
+      secretKey,
+      table: "profiles",
+      query: `email=eq.${encodeURIComponent(email)}&select=*&limit=1`,
+    });
+
+    const existingProfile =
+      existingProfileLookup.ok &&
+      Array.isArray(existingProfileLookup.data) &&
+      existingProfileLookup.data.length > 0
+        ? existingProfileLookup.data[0]
+        : null;
+
+    // Preserve an existing created_from when it is already set; otherwise use
+    // the incoming value.
+    const resolvedCreatedFrom =
+      existingProfile && existingProfile.created_from
+        ? existingProfile.created_from
+        : createdFrom;
+
+    // has_account is sticky: once true it stays true.
+    const resolvedHasAccount =
+      (existingProfile && existingProfile.has_account === true) || hasAccount;
+
+    // Merge metadata so we never drop previously stored keys.
+    const mergedMetadata = {
+      ...(existingProfile && existingProfile.metadata &&
+      typeof existingProfile.metadata === "object"
+        ? existingProfile.metadata
+        : {}),
+      source: "api/profile-get-or-create",
+      updated_at: nowIso,
+    };
+
+    // 1. Upsert the profile (keyed by email). Only include full_name,
+    //    avatar_url, and supabase_user_id when we actually have a value, so an
+    //    existing value is never overwritten with empty/null.
     const profileRow = {
       email,
-      has_account: hasAccount,
-      created_from: createdFrom,
-      metadata: {
-        source: "api/profile-get-or-create",
-        updated_at: nowIso,
-        tested_at: nowIso,
-      },
+      has_account: resolvedHasAccount,
+      created_from: resolvedCreatedFrom,
+      metadata: mergedMetadata,
     };
     if (wixMemberId) profileRow.wix_member_id = wixMemberId;
     if (fullName) profileRow.full_name = fullName;
+    if (avatarUrl) profileRow.avatar_url = avatarUrl;
+    if (supabaseUserId) profileRow.supabase_user_id = supabaseUserId;
 
     const profileResult = await supabaseUpsert({
       baseUrl: normalizedBaseUrl,

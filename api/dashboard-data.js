@@ -434,11 +434,20 @@ export default async function handler(req, res) {
       warnings.push("chat_sessions_query_failed");
     }
 
+    // Structured profile block for the dashboard UI (name/avatar display).
+    const profileBlock = {
+      email,
+      fullName: (profile && profile.full_name) || "",
+      avatarUrl: (profile && profile.avatar_url) || "",
+      hasAccount: (profile && profile.has_account) || false,
+    };
+
     res.status(200).json({
       success: true,
       source: "supabase",
       email,
-      profile: profile || null,
+      profile: profileBlock,
+      profileRaw: profile || null,
       userAccess,
       savedGenerations,
       generationHistory,
