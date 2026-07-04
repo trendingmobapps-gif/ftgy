@@ -242,6 +242,154 @@ async function callConsumeFreeGeneration({
   }
 }
 
+// --- Supabase REST helpers (generation_history dual-write) ---
+// These talk directly to the Supabase REST API using the same conventions as
+// the other endpoints in this project. They never throw.
+
+// Select rows from a Supabase table using a filtered GET query.
+async function supabaseSelect({ baseUrl, secretKey, table, query }) {
+  try {
+    const resp = await fetch(`${baseUrl}/rest/v1/${table}?${query}`, {
+      method: "GET",
+      headers: {
+        apikey: secretKey,
+        Authorization: `Bearer ${secretKey}`,
+        "Content-Type": "application/json",
+      },
+    });
+    const text = await resp.text();
+    let data;
+    try {
+      data = text ? JSON.parse(text) : null;
+    } catch {
+      data = text;
+    }
+    return { ok: resp.ok, status: resp.status, data };
+  } catch (error) {
+    return { ok: false, status: 0, data: null, error: error?.message || "network error" };
+  }
+}
+
+// Insert a row into a Supabase table (returns the created representation).
+async function supabaseInsert({ baseUrl, secretKey, table, row }) {
+  try {
+    const resp = await fetch(`${baseUrl}/rest/v1/${table}`, {
+      method: "POST",
+      headers: {
+        apikey: secretKey,
+        Authorization: `Bearer ${secretKey}`,
+        "Content-Type": "application/json",
+        Prefer: "return=representation",
+      },
+      body: JSON.stringify(row),
+    });
+    const text = await resp.text();
+    let data;
+    try {
+      data = text ? JSON.parse(text) : null;
+    } catch {
+      data = text;
+    }
+    return { ok: resp.ok, status: resp.status, data };
+  } catch (error) {
+    return { ok: false, status: 0, data: null, error: error?.message || "network error" };
+  }
+}
+
+// Dual-write the completed generation into public.generation_history. Returns
+// { saved, id, error } and NEVER throws, so a Supabase failure can never break
+// the AI response. Wix generationhistory remains active in parallel.
+async function saveGenerationHistory({
+  email,
+  memberId,
+  wixItemId,
+  toolId,
+  toolName,
+  toolSlug,
+  categorySlug,
+  categoryName,
+  userInputJson,
+  resultMarkdown,
+  resultsJson,
+  variantNumber,
+  metadata,
+}) {
+  const baseUrl = process.env.SUPABASE_URL;
+  const secretKey = process.env.SUPABASE_SECRET_KEY;
+
+  if (!baseUrl || !secretKey) {
+    return { saved: false, id: null, error: "Supabase is not configured." };
+  }
+
+  try {
+    // Look up profile_id by email (best-effort; never fatal).
+    let profileId = null;
+    const profileLookup = await supabaseSelect({
+      baseUrl,
+      secretKey,
+      table: "profiles",
+      query: `email=eq.${encodeURIComponent(email)}&select=id&limit=1`,
+    });
+    if (
+      profileLookup.ok &&
+      Array.isArray(profileLookup.data) &&
+      profileLookup.data.length > 0
+    ) {
+      profileId = profileLookup.data[0].id || null;
+    }
+
+    const row = {
+      email,
+      member_id: memberId || null,
+      wix_item_id: wixItemId || null,
+      tool_id: toolId || null,
+      tool_name: toolName || null,
+      tool_slug: toolSlug || null,
+      category_slug: categorySlug || null,
+      category_name: categoryName || null,
+      user_input_json:
+        userInputJson && typeof userInputJson === "object" ? userInputJson : {},
+      result_markdown:
+        typeof resultMarkdown === "string" ? resultMarkdown : null,
+      results_json: resultsJson || null,
+      variant_number:
+        Number.isFinite(Number(variantNumber)) && variantNumber !== null
+          ? Number(variantNumber)
+          : null,
+      source: "vercel",
+      metadata: metadata && typeof metadata === "object" ? metadata : {},
+    };
+    // Only set profile_id when we actually found one.
+    if (profileId) {
+      row.profile_id = profileId;
+    }
+
+    const result = await supabaseInsert({
+      baseUrl,
+      secretKey,
+      table: "generation_history",
+      row,
+    });
+
+    if (!result.ok) {
+      return {
+        saved: false,
+        id: null,
+        error: "Supabase generation_history insert failed.",
+      };
+    }
+
+    const created = Array.isArray(result.data) ? result.data[0] : result.data;
+    return { saved: true, id: created ? created.id || null : null, error: null };
+  } catch (error) {
+    return {
+      saved: false,
+      id: null,
+      error: error?.message || "Unexpected error saving generation history.",
+    };
+  }
+}
+
 // Parses a multipart/form-data request using formidable. Returns { fields, files }.
 function parseMultipartForm(req) {
   const form = formidable({
@@ -426,6 +574,13 @@ export default async function handler(req, res) {
   let idempotencyKeyRaw = "";
   // Category from access-specific body fields (falls back to categorySlug).
   let accessCategoryRaw = "";
+  // Optional fields used for the generation_history dual-write.
+  let memberIdRaw = "";
+  let wixItemIdRaw = "";
+  let toolNameRaw = "";
+  let categoryNameRaw = "";
+  let variantNumberRaw = null;
+  let generationTypeRaw = "";
 
   const contentType = String(req.headers["content-type"] || "").toLowerCase();
 
@@ -459,6 +614,22 @@ export default async function handler(req, res) {
         firstValue(fields.generationRequestId),
         firstValue(fields.requestId),
       );
+
+      // generation_history optional fields.
+      memberIdRaw = firstNonEmpty(
+        firstValue(fields.memberId),
+        firstValue(fields.wixMemberId),
+      );
+      wixItemIdRaw = firstNonEmpty(
+        firstValue(fields.generationHistoryId),
+        firstValue(fields.wixItemId),
+        firstValue(fields.wix_item_id),
+        firstValue(fields.historyId),
+      );
+      toolNameRaw = firstNonEmpty(firstValue(fields.toolName));
+      categoryNameRaw = firstNonEmpty(firstValue(fields.categoryName));
+      variantNumberRaw = firstValue(fields.variantNumber) ?? null;
+      generationTypeRaw = firstNonEmpty(firstValue(fields.generationType));
 
       // Improve mode fields (optional).
       const improveRaw = firstValue(fields.improveMode);
@@ -550,6 +721,22 @@ export default async function handler(req, res) {
       body.generationRequestId,
       body.requestId,
     );
+
+    // generation_history optional fields.
+    memberIdRaw = firstNonEmpty(body.memberId, body.wixMemberId);
+    wixItemIdRaw = firstNonEmpty(
+      body.generationHistoryId,
+      body.wixItemId,
+      body.wix_item_id,
+      body.historyId,
+    );
+    toolNameRaw = firstNonEmpty(body.toolName);
+    categoryNameRaw = firstNonEmpty(body.categoryName);
+    variantNumberRaw =
+      body.variantNumber !== undefined && body.variantNumber !== null
+        ? body.variantNumber
+        : null;
+    generationTypeRaw = firstNonEmpty(body.generationType);
 
     // Improve mode fields (optional).
     improveMode = body.improveMode === true || body.improveMode === "true";
@@ -1047,7 +1234,9 @@ Instrucțiuni de formatare:
       idempotencyKey,
     });
 
+    let usageConsumptionData = null;
     if (consume.ok && consume.data) {
+      usageConsumptionData = consume.data;
       responsePayload.usageConsumption = consume.data;
     } else {
       // The AI result is valid; do not fail the request just because the
@@ -1060,6 +1249,62 @@ Instrucțiuni de formatare:
       responsePayload.consumptionWarning = true;
       responsePayload.consumptionError =
         "Nu am putut actualiza utilizarea. Rezultatul a fost generat.";
+    }
+
+    // --- Dual-write to Supabase public.generation_history ---
+    // Wix generationhistory stays active in parallel; this mirrors every
+    // successful generation into Supabase. A Supabase failure NEVER blocks the
+    // AI response. Saved AFTER consumption so metadata can include usageEventId.
+    const usageEvent =
+      usageConsumptionData && usageConsumptionData.usageEvent
+        ? usageConsumptionData.usageEvent
+        : null;
+    const uploadedFileName = uploadedFile ? uploadedFile.filename || null : null;
+    const hasFile =
+      !!uploadedFile ||
+      !!(userInput && typeof userInput === "object" && userInput.fisierMaterial);
+
+    const historySave = await saveGenerationHistory({
+      email: normalizedEmail,
+      memberId: memberIdRaw || null,
+      wixItemId: wixItemIdRaw || null,
+      toolId: tool.toolId,
+      toolName: toolNameRaw || tool.name || null,
+      toolSlug: resolvedToolSlug,
+      categorySlug: resolvedCategorySlug,
+      categoryName: categoryNameRaw || null,
+      userInputJson: userInput || {},
+      resultMarkdown: result,
+      resultsJson: null,
+      variantNumber: variantNumberRaw,
+      metadata: {
+        source: "api/generate-tool.js",
+        idempotencyKey,
+        accessType: accessCheckResult ? accessCheckResult.accessType : null,
+        usageEventId: usageEvent ? usageEvent.id || null : null,
+        usageConsumed: usageConsumptionData
+          ? usageConsumptionData.wasConsumed || false
+          : false,
+        generationType: generationTypeRaw || (improveMode ? "improve" : "initial"),
+        hasFile,
+        fileName: uploadedFileName,
+        toolSlug: resolvedToolSlug,
+        categorySlug: resolvedCategorySlug,
+        consumptionWarning: responsePayload.consumptionWarning || false,
+      },
+    });
+
+    responsePayload.generationHistorySaved = historySave.saved === true;
+    if (historySave.saved) {
+      responsePayload.generationHistoryId = historySave.id || null;
+    } else {
+      console.log(
+        "[v0] generate-tool generation_history save failed:",
+        historySave.error,
+      );
+      responsePayload.generationHistorySaveWarning = true;
+      responsePayload.generationHistorySaveError =
+        "Nu am putut salva generarea în Supabase. Rezultatul a fost generat.";
     }
 
     res.status(200).json(responsePayload);
