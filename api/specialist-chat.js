@@ -920,15 +920,21 @@ export default async function handler(req, res) {
 
     if (resolved.access.hasAccess !== true) {
       // Normal no-access case (no premium and no free generations): do NOT call
-      // OpenAI. This is NOT an internal error, so no generic error message.
+      // OpenAI and do NOT consume usage. Return a structured "free limit
+      // reached" response so the frontend can keep the chat open and show an
+      // in-chat upgrade CTA instead of auto-redirecting to the pricing page.
       res.status(402).json({
         success: false,
+        code: "FREE_LIMIT_REACHED",
+        upgradeRequired: true,
+        shouldRedirectToCheckout: false,
+        upgradeUrl: "/preturi",
         hasAccess: false,
-        shouldRedirectToCheckout: true,
         reason:
           resolved.access.reason || "no_paid_access_and_no_free_generations",
         freeGenerations: resolved.access.freeGenerations,
-        message: "No access available. Please upgrade to continue.",
+        message:
+          "Ai folosit toate generările gratuite. Pentru a continua conversația și pentru a folosi platforma mai departe, alege un plan Premium.",
       });
       return;
     }
