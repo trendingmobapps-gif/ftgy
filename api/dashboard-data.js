@@ -9,15 +9,34 @@
 // degrades to an empty array plus a safe warning instead of failing the whole
 // request.
 
-function setCorsHeaders(res) {
-  // Permissive CORS, compatible with the other API endpoints (called from Wix).
-  res.setHeader("Access-Control-Allow-Origin", "*");
+// Origins allowed to call this endpoint from the browser (Wix web + local dev).
+const allowedOrigins = [
+  "https://www.iterai.ro",
+  "https://iterai.ro",
+  "https://iter.ro",
+  "http://localhost:3000",
+  "http://localhost:5173",
+];
+
+// Reflects the request Origin when it is in the allowlist; otherwise falls back
+// to the primary production origin. Reflecting a specific origin (not "*") is
+// required so the browser accepts credentialed/again cross-origin responses.
+function setCorsHeaders(req, res) {
+  const origin = req.headers.origin;
+  const allowedOrigin = allowedOrigins.includes(origin)
+    ? origin
+    : "https://www.iterai.ro";
+
+  res.setHeader("Access-Control-Allow-Origin", allowedOrigin);
   res.setHeader("Access-Control-Allow-Methods", "POST, OPTIONS");
   res.setHeader(
     "Access-Control-Allow-Headers",
     "Content-Type, Authorization, x-iter-secret",
   );
   res.setHeader("Access-Control-Max-Age", "86400");
+  // Vary on Origin so caches don't serve the wrong allow-origin to a different
+  // origin.
+  res.setHeader("Vary", "Origin");
 }
 
 // Picks the first non-empty string from a list of candidate values.
@@ -82,7 +101,7 @@ function safeStringify(value, fallback) {
 }
 
 export default async function handler(req, res) {
-  setCorsHeaders(res);
+  setCorsHeaders(req, res);
 
   // Handle CORS preflight.
   if (req.method === "OPTIONS") {
