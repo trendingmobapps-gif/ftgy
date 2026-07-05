@@ -557,6 +557,11 @@ export default async function handler(req, res) {
         };
       });
     } else if (!savedLookup.ok) {
+      console.error("[dashboard-data] saved_generations error", {
+        status: savedLookup.status,
+        data: savedLookup.data,
+        error: savedLookup.error,
+      });
       warnings.push("saved_generations_query_failed");
     }
 
@@ -592,6 +597,11 @@ export default async function handler(req, res) {
         updatedAt: row.updated_at,
       }));
     } else if (!historyLookup.ok) {
+      console.error("[dashboard-data] generation_history error", {
+        status: historyLookup.status,
+        data: historyLookup.data,
+        error: historyLookup.error,
+      });
       warnings.push("generation_history_query_failed");
     }
 
@@ -619,16 +629,9 @@ export default async function handler(req, res) {
         const normalizedChatSessionId =
           row.wix_item_id || row.chat_session_id || row.id;
 
-        // Resolve the FULL stored messages array from chat_sessions. The field
-        // is `messages_json`; accept a couple of legacy fallbacks just in case.
-        const rawMessages = Array.isArray(row.messages_json)
-          ? row.messages_json
-          : Array.isArray(row.messages)
-            ? row.messages
-            : Array.isArray(row.chat_messages)
-              ? row.chat_messages
-              : [];
-        const fullMessagesArray = rawMessages;
+        // Resolve the FULL stored messages array from chat_sessions, accepting
+        // any of the column/shape variants the data may have been stored under.
+        const fullMessagesArray = extractMessagesArray(row);
 
         // Category slug resolution (supports metadata fallback).
         const normalizedCategorySlug =
@@ -725,6 +728,11 @@ export default async function handler(req, res) {
         };
       });
     } else if (!chatLookup.ok) {
+      console.error("[dashboard-data] chat_sessions error", {
+        status: chatLookup.status,
+        data: chatLookup.data,
+        error: chatLookup.error,
+      });
       warnings.push("chat_sessions_query_failed");
     }
 
@@ -749,14 +757,19 @@ export default async function handler(req, res) {
       warnings,
     });
   } catch (error) {
-    // Log the real cause to Vercel; return a safe message to the client.
-    console.error(
-      "[v0] dashboard-data internal error:",
-      error?.message || String(error),
-    );
+    // Log the real cause to Vercel and surface it to the client so the failure
+    // is debuggable instead of a generic 500. CORS headers were already set at
+    // the very top of the handler, so this response is still cross-origin safe.
+    console.error("[dashboard-data] internal error", {
+      message: error?.message || String(error),
+      stack: error?.stack,
+    });
     res.status(500).json({
       success: false,
-      message: "Nu am putut încărca datele dashboard-ului.",
+      source: "supabase",
+      message: "Dashboard data failed",
+      error: error?.message || String(error),
+      stack: process.env.NODE_ENV !== "production" ? error?.stack : undefined,
       errorCode: "internal_error",
     });
   }
