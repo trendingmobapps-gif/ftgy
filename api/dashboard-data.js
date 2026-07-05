@@ -411,7 +411,58 @@ export default async function handler(req, res) {
             ? row.category_slug
             : row.specialist_slug;
 
+        // Canonical chat session id: prefer wix_item_id so web and mobile open
+        // the SAME conversation. Only fall back to the Supabase row id when no
+        // wix_item_id (or legacy chat_session_id) exists.
+        const normalizedChatSessionId =
+          row.wix_item_id || row.chat_session_id || row.id;
+
+        // Resolve the FULL stored messages array from chat_sessions. The field
+        // is `messages_json`; accept a couple of legacy fallbacks just in case.
+        const rawMessages = Array.isArray(row.messages_json)
+          ? row.messages_json
+          : Array.isArray(row.messages)
+            ? row.messages
+            : Array.isArray(row.chat_messages)
+              ? row.chat_messages
+              : [];
+        const fullMessagesArray = rawMessages;
+
+        // Category slug resolution (supports metadata fallback).
+        const normalizedCategorySlug =
+          row.category_slug ||
+          row.categorySlug ||
+          (row.metadata && row.metadata.categorySlug) ||
+          "";
+
+        // Last message: prefer stored preview, else derive from the last
+        // message's text content. Never return only lastMessage.
+        const lastStored =
+          fullMessagesArray.length > 0
+            ? fullMessagesArray[fullMessagesArray.length - 1]
+            : null;
+        const derivedLast =
+          lastStored && typeof lastStored === "object"
+            ? lastStored.content ||
+              lastStored.text ||
+              lastStored.message ||
+              ""
+            : "";
+        const lastMessage = row.last_message_preview || derivedLast || "";
+
+        const title = row.chat_title || row.category_name || "Chat ITER";
+
+        console.log("[dashboard-data chat row]", {
+          rowId: row.id,
+          rowWixItemId: row.wix_item_id,
+          normalizedChatSessionId,
+          categorySlug: displayCategorySlug || normalizedCategorySlug,
+          messagesCount: fullMessagesArray.length,
+          lastMessage,
+        });
+
         return {
+          // --- Existing fields (unchanged, do not remove) ---
           _id: row.wix_item_id || row.id,
           supabaseId: row.id,
           dataSource: "supabase",
@@ -422,12 +473,36 @@ export default async function handler(req, res) {
           realCategorySlug: row.category_slug || "",
           specialistSlug: row.specialist_slug || "",
           categoryName: row.category_name || "",
-          title: row.chat_title || row.category_name || "Chat ITER",
-          messagesJson: safeStringify(row.messages_json || [], "[]"),
+          title,
+          messagesJson: safeStringify(fullMessagesArray, "[]"),
           toolsJson: safeStringify(row.tools_json || [], "[]"),
           lastMessagePreview: row.last_message_preview || "",
           createdAt: row.created_at,
           updatedAt: row.updated_at,
+
+          // --- Normalized id fields (canonical: wix_item_id) ---
+          id: row.id,
+          chatSessionId: normalizedChatSessionId,
+          chat_session_id: normalizedChatSessionId,
+          wixItemId: normalizedChatSessionId,
+          wix_item_id: normalizedChatSessionId,
+
+          // --- Normalized category + type ---
+          category_slug: displayCategorySlug || normalizedCategorySlug,
+          type: row.chat_type || row.type || "category",
+
+          // --- Full messages under all expected field names ---
+          messageCount: fullMessagesArray.length,
+          messages: fullMessagesArray,
+          chatMessages: fullMessagesArray,
+
+          // --- Last message under both casings ---
+          lastMessage,
+          last_message: lastMessage,
+
+          // --- Timestamps under both casings ---
+          created_at: row.created_at,
+          updated_at: row.updated_at,
         };
       });
     } else if (!chatLookup.ok) {
