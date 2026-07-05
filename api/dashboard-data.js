@@ -471,14 +471,31 @@ export default async function handler(req, res) {
 
         const title = row.chat_title || row.category_name || "Chat ITER";
 
-        console.log("[dashboard-data chat row]", {
+        console.log("[dashboard-data chatHistory normalized item]", {
           rowId: row.id,
           rowWixItemId: row.wix_item_id,
-          normalizedChatSessionId,
+          canonicalChatSessionId: normalizedChatSessionId,
           categorySlug: displayCategorySlug || normalizedCategorySlug,
           messagesCount: fullMessagesArray.length,
           lastMessage,
         });
+
+        // Temporary targeted diagnostic for the specific chat reported as
+        // failing to open on web. Remove once confirmed working.
+        if (
+          row.id === "85151135-c745-4742-8588-1721dcc4217f" ||
+          row.wix_item_id === "99dce5a7-cedb-4dde-9f2f-89a6f9dcecad"
+        ) {
+          console.log("[dashboard-data TARGET CHAT FOUND]", {
+            canonicalChatSessionId: normalizedChatSessionId,
+            returnedFields: {
+              chatSessionId: normalizedChatSessionId,
+              wixItemId: normalizedChatSessionId,
+              wix_item_id: normalizedChatSessionId,
+              id: row.id,
+            },
+          });
+        }
 
         return {
           // --- Existing fields (unchanged, do not remove) ---
