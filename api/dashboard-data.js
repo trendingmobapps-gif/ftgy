@@ -90,6 +90,62 @@ async function supabaseSelect({ baseUrl, secretKey, table, query }) {
   }
 }
 
+// Insert a row into a Supabase table (returns the created representation).
+// Never throws.
+async function supabaseInsert({ baseUrl, secretKey, table, row }) {
+  try {
+    const resp = await fetch(`${baseUrl}/rest/v1/${table}`, {
+      method: "POST",
+      headers: {
+        apikey: secretKey,
+        Authorization: `Bearer ${secretKey}`,
+        "Content-Type": "application/json",
+        Prefer: "return=representation",
+      },
+      body: JSON.stringify(row),
+    });
+    const text = await resp.text();
+    let data;
+    try {
+      data = text ? JSON.parse(text) : null;
+    } catch {
+      data = text;
+    }
+    return { ok: resp.ok, status: resp.status, data };
+  } catch (error) {
+    return {
+      ok: false,
+      status: 0,
+      data: null,
+      error: error?.message || "network error",
+    };
+  }
+}
+
+// Extracts a full messages array from a chat_sessions row regardless of which
+// column/shape the data was stored under. Returns [] when nothing is found.
+function extractMessagesArray(row) {
+  if (!row || typeof row !== "object") return [];
+  const candidates = [
+    row.messages_json,
+    row.messages,
+    row.chatMessages,
+    row.chat_messages,
+    row.conversation,
+    row.conversationMessages,
+    row.conversation_json,
+    row.metadata && row.metadata.messages,
+    row.metadata && row.metadata.chatMessages,
+    row.data && row.data.messages,
+  ];
+  for (const candidate of candidates) {
+    if (Array.isArray(candidate) && candidate.length > 0) return candidate;
+  }
+  // Also accept an empty array if messages_json is explicitly an empty array.
+  if (Array.isArray(row.messages_json)) return row.messages_json;
+  return [];
+}
+
 // Safely stringify a JSON-ish value, falling back to a default string.
 function safeStringify(value, fallback) {
   try {
@@ -175,24 +231,87 @@ export default async function handler(req, res) {
   const nowMs = Date.now();
 
   try {
-    // --- 1. Profile lookup (best-effort). ---
+    // --- 1. Profile lookup (by supabase_user_id = memberId OR email). ---
     let profile = null;
     let profileId = null;
-    const profileLookup = await supabaseSelect({
-      baseUrl,
-      secretKey,
-      table: "profiles",
-      query: `email=eq.${encodedEmail}&select=*&limit=1`,
-    });
-    if (
-      profileLookup.ok &&
-      Array.isArray(profileLookup.data) &&
-      profileLookup.data.length > 0
-    ) {
-      profile = profileLookup.data[0];
-      profileId = profile.id || null;
-    } else if (!profileLookup.ok) {
-      warnings.push("profile_query_failed");
+
+    // 1a. Try by supabase_user_id when a memberId was provided.
+    if (memberId) {
+      const byMember = await supabaseSelect({
+        baseUrl,
+        secretKey,
+        table: "profiles",
+        query: `supabase_user_id=eq.${encodeURIComponent(memberId)}&select=*&limit=1`,
+      });
+      if (
+        byMember.ok &&
+        Array.isArray(byMember.data) &&
+        byMember.data.length > 0
+      ) {
+        profile = byMember.data[0];
+        profileId = profile.id || null;
+      } else if (!byMember.ok) {
+        console.error("[dashboard-data] profiles (by memberId) error", {
+          status: byMember.status,
+          data: byMember.data,
+          error: byMember.error,
+        });
+      }
+    }
+
+    // 1b. Fall back to lookup by email.
+    if (!profile) {
+      const profileLookup = await supabaseSelect({
+        baseUrl,
+        secretKey,
+        table: "profiles",
+        query: `email=eq.${encodedEmail}&select=*&limit=1`,
+      });
+      if (
+        profileLookup.ok &&
+        Array.isArray(profileLookup.data) &&
+        profileLookup.data.length > 0
+      ) {
+        profile = profileLookup.data[0];
+        profileId = profile.id || null;
+      } else if (!profileLookup.ok) {
+        console.error("[dashboard-data] profiles (by email) error", {
+          status: profileLookup.status,
+          data: profileLookup.data,
+          error: profileLookup.error,
+        });
+        warnings.push("profile_query_failed");
+      }
+    }
+
+    // 1c. Create the profile if it does not exist yet. Never fatal.
+    if (!profile) {
+      const createProfile = await supabaseInsert({
+        baseUrl,
+        secretKey,
+        table: "profiles",
+        row: {
+          email,
+          supabase_user_id: memberId || null,
+          has_account: true,
+          created_from: "web_dashboard_data",
+        },
+      });
+      if (
+        createProfile.ok &&
+        Array.isArray(createProfile.data) &&
+        createProfile.data.length > 0
+      ) {
+        profile = createProfile.data[0];
+        profileId = profile.id || null;
+      } else {
+        console.error("[dashboard-data] profiles insert error", {
+          status: createProfile.status,
+          data: createProfile.data,
+          error: createProfile.error,
+        });
+        warnings.push("profile_create_failed");
+      }
     }
 
     // --- 2. Active user_access rows. ---
@@ -219,6 +338,11 @@ export default async function handler(req, res) {
         return true;
       });
     } else if (!accessLookup.ok) {
+      console.error("[dashboard-data] user_access error", {
+        status: accessLookup.status,
+        data: accessLookup.data,
+        error: accessLookup.error,
+      });
       warnings.push("user_access_query_failed");
     }
 
@@ -238,6 +362,11 @@ export default async function handler(req, res) {
       ) {
         usageRow = byProfile.data[0];
       } else if (!byProfile.ok) {
+        console.error("[dashboard-data] usage_limits (by profile_id) error", {
+          status: byProfile.status,
+          data: byProfile.data,
+          error: byProfile.error,
+        });
         warnings.push("usage_limits_query_failed");
       }
     }
@@ -254,8 +383,46 @@ export default async function handler(req, res) {
         byEmail.data.length > 0
       ) {
         usageRow = byEmail.data[0];
-      } else if (!byEmail.ok && !warnings.includes("usage_limits_query_failed")) {
-        warnings.push("usage_limits_query_failed");
+      } else if (!byEmail.ok) {
+        console.error("[dashboard-data] usage_limits (by email) error", {
+          status: byEmail.status,
+          data: byEmail.data,
+          error: byEmail.error,
+        });
+        if (!warnings.includes("usage_limits_query_failed")) {
+          warnings.push("usage_limits_query_failed");
+        }
+      }
+    }
+
+    // Create a default usage_limits row (3 free generations) when none exists
+    // and we know the profile id. Never fatal.
+    if (!usageRow && profileId) {
+      const createUsage = await supabaseInsert({
+        baseUrl,
+        secretKey,
+        table: "usage_limits",
+        row: {
+          profile_id: profileId,
+          email,
+          free_generations_total: 3,
+          free_generations_used: 0,
+          free_generations_remaining: 3,
+        },
+      });
+      if (
+        createUsage.ok &&
+        Array.isArray(createUsage.data) &&
+        createUsage.data.length > 0
+      ) {
+        usageRow = createUsage.data[0];
+      } else {
+        console.error("[dashboard-data] usage_limits insert error", {
+          status: createUsage.status,
+          data: createUsage.data,
+          error: createUsage.error,
+        });
+        warnings.push("usage_limits_create_failed");
       }
     }
 
@@ -272,19 +439,35 @@ export default async function handler(req, res) {
       ),
     );
 
-    // Free usage defaults to 3/0/3 when no usage row exists.
+    // Free usage defaults to 3/0/3 when no usage row exists. Read from whatever
+    // field names exist so schema variations never crash.
+    const pickNumber = (...values) => {
+      for (const v of values) {
+        if (v === undefined || v === null) continue;
+        const n = Number(v);
+        if (Number.isFinite(n)) return n;
+      }
+      return null;
+    };
+
     const freeGenerationsTotal =
-      usageRow && Number.isFinite(Number(usageRow.free_generations_total))
-        ? Number(usageRow.free_generations_total)
-        : 3;
+      pickNumber(
+        usageRow?.free_generations_total,
+        usageRow?.freeGenerationsTotal,
+        usageRow?.total,
+      ) ?? 3;
     const freeGenerationsUsed =
-      usageRow && Number.isFinite(Number(usageRow.free_generations_used))
-        ? Number(usageRow.free_generations_used)
-        : 0;
+      pickNumber(
+        usageRow?.free_generations_used,
+        usageRow?.freeGenerationsUsed,
+        usageRow?.used,
+      ) ?? 0;
     const freeGenerationsRemaining =
-      usageRow && Number.isFinite(Number(usageRow.free_generations_remaining))
-        ? Number(usageRow.free_generations_remaining)
-        : Math.max(freeGenerationsTotal - freeGenerationsUsed, 0);
+      pickNumber(
+        usageRow?.free_generations_remaining,
+        usageRow?.freeGenerationsRemaining,
+        usageRow?.remaining,
+      ) ?? Math.max(freeGenerationsTotal - freeGenerationsUsed, 0);
 
     // Build the categoryAccess map keyed by canonical slugs.
     const categoryAccess = {};
