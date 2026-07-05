@@ -290,6 +290,33 @@ function firstNonEmpty(...candidates) {
   return "";
 }
 
+// Returns the first candidate that is a non-empty array; otherwise []. Used to
+// accept the conversation under any of the field names web/mobile may send.
+function firstNonEmptyArray(...candidates) {
+  for (const candidate of candidates) {
+    if (Array.isArray(candidate) && candidate.length > 0) return candidate;
+  }
+  return [];
+}
+
+// Extracts the text content of a chat message regardless of shape (web and
+// mobile use slightly different keys).
+function messageText(msg) {
+  if (!msg) return "";
+  if (typeof msg === "string") return msg.trim();
+  if (typeof msg.content === "string") return msg.content.trim();
+  if (typeof msg.text === "string") return msg.text.trim();
+  if (typeof msg.message === "string") return msg.message.trim();
+  return "";
+}
+
+// Extracts the role of a chat message regardless of shape.
+function messageRole(msg) {
+  if (!msg || typeof msg !== "object") return "";
+  const raw = msg.role || msg.sender || msg.author || msg.from || "";
+  return String(raw).trim().toLowerCase();
+}
+
 // Builds the base URL of the incoming request so internal API calls target the
 // same host/deployment instead of a hardcoded domain.
 function getRequestBaseUrl(req) {
@@ -580,10 +607,28 @@ export default async function handler(req, res) {
 
   const categorySlug =
     typeof body.categorySlug === "string" ? body.categorySlug.trim() : "";
-  const message = typeof body.message === "string" ? body.message : "";
-  const conversation = Array.isArray(body.conversation)
-    ? body.conversation
-    : [];
+  // The current user message can arrive under `message` or `userMessage`.
+  const message =
+    typeof body.message === "string" && body.message
+      ? body.message
+      : typeof body.userMessage === "string"
+        ? body.userMessage
+        : "";
+
+  // Resolve the FULL incoming conversation. Web sends `conversation`; mobile
+  // sends `messages` / `chatMessages` / `conversationMessages`. We accept all
+  // of them so mobile-created chats save the complete history, not just a
+  // preview. First non-empty array wins.
+  const incomingMessages = firstNonEmptyArray(
+    body.messages,
+    body.chatMessages,
+    body.chat_messages,
+    body.conversation,
+    body.conversationMessages,
+  );
+  // Keep `conversation` as an alias so the rest of the handler (model prompt
+  // building) keeps working unchanged.
+  const conversation = incomingMessages;
 
   // Access / free-trial consumption fields (optional; sent by the frontend).
   const normalizedEmail = firstNonEmpty(
@@ -601,9 +646,18 @@ export default async function handler(req, res) {
     categorySlug,
   );
   // Prefer a frontend-supplied chat session id; otherwise generate a fallback.
+  // Mobile sends the id as `wixItemId` / `wix_item_id`; web sends
+  // `chatSessionId`. We accept all of them so mobile-created chats are saved
+  // under the SAME wix_item_id the web dashboard looks them up by. This is the
+  // fix for mobile chats showing "chat not found" on web.
   const chatSessionId =
-    firstNonEmpty(body.chatSessionId, body.sessionId, body.conversationId) ||
-    randomUUID();
+    firstNonEmpty(
+      body.chatSessionId,
+      body.wixItemId,
+      body.wix_item_id,
+      body.sessionId,
+      body.conversationId,
+    ) || randomUUID();
   // Prefer a frontend-supplied idempotency key; otherwise generate a fallback so
   // consume-free-generation stays idempotent per request.
   const idempotencyKey =
@@ -1017,9 +1071,11 @@ toolId trebuie să fie identic cu unul din listă.`;
     const messages = [{ role: "system", content: systemPrompt }];
     for (const turn of recentConversation) {
       if (!turn || typeof turn !== "object") continue;
-      const role = turn.role === "assistant" ? "assistant" : "user";
-      const content = typeof turn.content === "string" ? turn.content : "";
-      if (content.trim()) messages.push({ role, content });
+      // Use shape-tolerant helpers so both web (`role`/`content`) and mobile
+      // (`sender`/`text`, etc.) history is included in the model context.
+      const role = messageRole(turn) === "assistant" ? "assistant" : "user";
+      const content = messageText(turn);
+      if (content) messages.push({ role, content });
     }
 
     // The final user turn combines the typed message (if any) with answers the
@@ -1152,17 +1208,44 @@ toolId trebuie să fie identic cu unul din listă.`;
     // --- Dual-write to Supabase public.chat_sessions ---
     // Wix chathistory stays active in parallel; this mirrors the same chat into
     // Supabase. A Supabase failure NEVER blocks the AI response.
-    // The incoming conversation already contains the user message; append the
-    // assistant reply (with any recommended tool / follow-up fields).
-    const messagesJson = [
-      ...conversation,
-      {
-        role: "assistant",
-        content: reply,
-        recommendedTool: recommendedTool || null,
-        followUpFields: followUpFields || null,
-      },
-    ];
+    //
+    // Build the FULL conversation that gets persisted. `incomingMessages` is the
+    // complete history the client sent (web or mobile). We must not overwrite it
+    // with only a preview, and we must not duplicate the current user message:
+    //  - If the incoming history already ends with the current user message,
+    //    keep it as-is.
+    //  - Otherwise append the current user message first, then the assistant.
+    const assistantMessage = {
+      role: "assistant",
+      content: reply,
+      recommendedTool: recommendedTool || null,
+      followUpFields: followUpFields || null,
+    };
+
+    const lastIncoming =
+      incomingMessages.length > 0
+        ? incomingMessages[incomingMessages.length - 1]
+        : null;
+    const incomingHasUserMessage =
+      lastIncoming &&
+      messageRole(lastIncoming) === "user" &&
+      messageText(lastIncoming) === String(message).trim();
+
+    const fullMessages = [...incomingMessages];
+    if (!incomingHasUserMessage && String(message).trim()) {
+      fullMessages.push({ role: "user", content: message });
+    }
+    fullMessages.push(assistantMessage);
+
+    console.log(
+      "[category-chat] resolved chatSessionId",
+      chatSessionId,
+    );
+    console.log(
+      "[category-chat] incoming messages count",
+      incomingMessages.length,
+    );
+    console.log("[category-chat] final messages count", fullMessages.length);
 
     const chatSave = await saveChatSessionToSupabase({
       email: normalizedEmail,
@@ -1171,14 +1254,22 @@ toolId trebuie să fie identic cu unul din listă.`;
       categoryName: category.name || null,
       memberId,
       tools: normalizedTools,
-      messagesJson,
+      messagesJson: fullMessages,
       assistantReply: reply,
       idempotencyKey,
       accessType: accessCheckResult ? accessCheckResult.accessType : null,
     });
 
+    console.log("[category-chat] saved wix_item_id", chatSessionId);
+
     responsePayload.chatSessionSaved = chatSave.saved === true;
+    // Return the id + full messages under both web and mobile field names so
+    // either client can immediately render / reopen the conversation.
     responsePayload.chatSessionId = chatSessionId;
+    responsePayload.wixItemId = chatSessionId;
+    responsePayload.messages = fullMessages;
+    responsePayload.chatMessages = fullMessages;
+    responsePayload.lastMessage = reply;
     if (!chatSave.saved) {
       console.log(
         "[v0] category-chat chat_sessions save failed:",
