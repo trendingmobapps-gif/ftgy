@@ -5,12 +5,30 @@
 
 import { randomUUID } from "node:crypto";
 
-function setCorsHeaders(res) {
-  res.setHeader("Access-Control-Allow-Origin", "*");
-  res.setHeader("Access-Control-Allow-Methods", "POST, OPTIONS");
+// Origins allowed to call this endpoint from the browser (Wix web + local dev).
+const allowedOrigins = [
+  "https://www.iterai.ro",
+  "https://iterai.ro",
+  "https://iter.ro",
+  "http://localhost:3000",
+  "http://localhost:5173",
+];
+
+// Reflects the request Origin when it is in the allowlist; otherwise falls back
+// to the primary production origin. A specific origin (not "*") is required so
+// the browser accepts responses when auth headers are involved.
+function setCorsHeaders(req, res) {
+  const origin = req.headers.origin;
+  const allowedOrigin = allowedOrigins.includes(origin)
+    ? origin
+    : "https://www.iterai.ro";
+
+  res.setHeader("Access-Control-Allow-Origin", allowedOrigin);
+  res.setHeader("Vary", "Origin");
+  res.setHeader("Access-Control-Allow-Methods", "GET, POST, OPTIONS");
   res.setHeader(
     "Access-Control-Allow-Headers",
-    "Content-Type, x-iter-secret, Authorization"
+    "Content-Type, Authorization, x-iter-secret, Cache-Control, Pragma, X-Requested-With"
   );
   res.setHeader("Access-Control-Max-Age", "86400");
 }
@@ -206,7 +224,7 @@ function buildUsageEvent(base) {
 }
 
 export default async function handler(req, res) {
-  setCorsHeaders(res);
+  setCorsHeaders(req, res);
 
   // Handle CORS preflight.
   if (req.method === "OPTIONS") {
