@@ -217,6 +217,11 @@ export default async function handler(req, res) {
   // (web + full mobile history pages) keeps the current full-history behavior.
   const source = firstNonEmpty(body.source);
   const isMobileHomepageRequest = source === "mobile-homepage";
+  // Preview-only mode returns a lightweight payload (no full messages, no full
+  // generation output, no saved generations). Only ever true for the mobile
+  // homepage; every other request keeps the full behavior.
+  const isPreviewOnly =
+    isMobileHomepageRequest && body.previewOnly === true;
 
   // Parses a client-supplied limit into a safe integer (1..50) or null.
   const parseSafeLimit = (value, fallback) => {
@@ -541,13 +546,17 @@ export default async function handler(req, res) {
 
     // --- 5. saved_generations (Wix-compatible shape). ---
     let savedGenerations = [];
-    const savedLookup = await supabaseSelect({
-      baseUrl,
-      secretKey,
-      table: "saved_generations",
-      query: `email=eq.${encodedEmail}&order=created_at.desc&limit=${finalSavedGenerationLimit}&select=*`,
-    });
-    if (savedLookup.ok && Array.isArray(savedLookup.data)) {
+    // Preview-only (mobile homepage) does not need saved generations at all, so
+    // skip the query entirely and return an empty array.
+    const savedLookup = isPreviewOnly
+      ? { ok: true, data: [] }
+      : await supabaseSelect({
+          baseUrl,
+          secretKey,
+          table: "saved_generations",
+          query: `email=eq.${encodedEmail}&order=created_at.desc&limit=${finalSavedGenerationLimit}&select=*`,
+        });
+    if (!isPreviewOnly && savedLookup.ok && Array.isArray(savedLookup.data)) {
       savedGenerations = savedLookup.data.map((row) => {
         // resultsJson: use results_json, else derive from result_markdown.
         let resultsJsonStr;
@@ -612,28 +621,74 @@ export default async function handler(req, res) {
       query: `email=eq.${encodedEmail}&order=created_at.desc&limit=${finalGenerationLimit}&select=*`,
     });
     if (historyLookup.ok && Array.isArray(historyLookup.data)) {
-      generationHistory = historyLookup.data.map((row) => ({
-        _id: row.wix_item_id || row.id,
-        supabaseId: row.id,
-        dataSource: "supabase",
-        memberId: row.member_id || email,
-        buyerEmail: row.email,
-        toolId: row.tool_id || "",
-        toolName: row.tool_name || "",
-        toolSlug: row.tool_slug || "",
-        categorySlug: row.category_slug || "",
-        categoryName: row.category_name || "",
-        userInputJson: safeStringify(row.user_input_json || {}, "{}"),
-        resultMarkdown: row.result_markdown || "",
-        variantNumber:
-          row.variant_number !== undefined &&
-          row.variant_number !== null &&
-          Number.isFinite(Number(row.variant_number))
-            ? Number(row.variant_number)
-            : 1,
-        createdAt: row.created_at,
-        updatedAt: row.updated_at,
-      }));
+      if (isPreviewOnly) {
+        // Lightweight generation previews: NO full result/output/content. Only
+        // ids, tool/category labels, and a short trimmed preview string.
+        generationHistory = historyLookup.data.map((row) => {
+          const generationId = row.generation_id || row.id;
+
+          const title =
+            row.title || row.tool_name || row.tool_id || "Generare ITER";
+
+          const previewSource =
+            row.preview ||
+            row.input_summary ||
+            row.result_markdown ||
+            "";
+
+          const preview = String(previewSource || "")
+            .replace(/\s+/g, " ")
+            .trim()
+            .slice(0, 180);
+
+          return {
+            _id: row.wix_item_id || row.id,
+            supabaseId: row.id,
+            id: row.id,
+            dataSource: "supabase",
+            generationId,
+            generation_id: generationId,
+            toolId: row.tool_id || "",
+            tool_id: row.tool_id || "",
+            toolName: row.tool_name || "",
+            tool_name: row.tool_name || "",
+            toolSlug: row.tool_slug || "",
+            tool_slug: row.tool_slug || "",
+            categorySlug: row.category_slug || "",
+            category_slug: row.category_slug || "",
+            categoryName: row.category_name || "",
+            title,
+            preview,
+            createdAt: row.created_at,
+            created_at: row.created_at,
+            updatedAt: row.updated_at,
+            updated_at: row.updated_at,
+          };
+        });
+      } else {
+        generationHistory = historyLookup.data.map((row) => ({
+          _id: row.wix_item_id || row.id,
+          supabaseId: row.id,
+          dataSource: "supabase",
+          memberId: row.member_id || email,
+          buyerEmail: row.email,
+          toolId: row.tool_id || "",
+          toolName: row.tool_name || "",
+          toolSlug: row.tool_slug || "",
+          categorySlug: row.category_slug || "",
+          categoryName: row.category_name || "",
+          userInputJson: safeStringify(row.user_input_json || {}, "{}"),
+          resultMarkdown: row.result_markdown || "",
+          variantNumber:
+            row.variant_number !== undefined &&
+            row.variant_number !== null &&
+            Number.isFinite(Number(row.variant_number))
+              ? Number(row.variant_number)
+              : 1,
+          createdAt: row.created_at,
+          updatedAt: row.updated_at,
+        }));
+      }
     } else if (!historyLookup.ok) {
       console.error("[dashboard-data] generation_history error", {
         status: historyLookup.status,
@@ -645,13 +700,74 @@ export default async function handler(req, res) {
 
     // --- 7. chat_sessions (Wix-compatible shape). ---
     let chatHistory = [];
+    // In preview-only mode we select only the light columns needed for a card
+    // (never messages_json / tools_json / heavy blobs), which keeps the payload
+    // small. Normal mode keeps select=* so full history is unchanged.
+    const chatSelect = isPreviewOnly
+      ? "id,wix_item_id,chat_session_id,chat_type,category_slug,specialist_slug,category_name,chat_title,last_message_preview,member_id,email,profile_id,created_at,updated_at"
+      : "*";
     const chatLookup = await supabaseSelect({
       baseUrl,
       secretKey,
       table: "chat_sessions",
-      query: `email=eq.${encodedEmail}&order=updated_at.desc&limit=${finalChatLimit}&select=*`,
+      query: `email=eq.${encodedEmail}&order=updated_at.desc&limit=${finalChatLimit}&select=${chatSelect}`,
     });
-    if (chatLookup.ok && Array.isArray(chatLookup.data)) {
+    if (chatLookup.ok && Array.isArray(chatLookup.data) && isPreviewOnly) {
+      // Lightweight chat previews: NO message parsing, NO per-item logging, NO
+      // conversation/metadata. Empty messages arrays so mobile cards render.
+      chatHistory = chatLookup.data.map((row) => {
+        const displayCategorySlug =
+          row.chat_type === "category"
+            ? row.category_slug
+            : row.specialist_slug;
+
+        const normalizedChatSessionId =
+          row.wix_item_id || row.chat_session_id || row.id;
+
+        const categorySlug = displayCategorySlug || row.category_slug || "";
+
+        const lastMessage = row.last_message_preview || "";
+
+        const title = row.chat_title || row.category_name || "Chat ITER";
+
+        return {
+          _id: row.wix_item_id || row.id,
+          supabaseId: row.id,
+          id: row.id,
+          dataSource: "supabase",
+          memberId: row.member_id || email,
+          buyerEmail: row.email,
+          chatType: row.chat_type,
+          type: row.chat_type || "category",
+          categorySlug,
+          category_slug: categorySlug,
+          realCategorySlug: row.category_slug || "",
+          specialistSlug: row.specialist_slug || "",
+          categoryName: row.category_name || "",
+          title,
+          chatSessionId: normalizedChatSessionId,
+          chat_session_id: normalizedChatSessionId,
+          wixItemId: normalizedChatSessionId,
+          wix_item_id: normalizedChatSessionId,
+          lastMessage,
+          last_message: lastMessage,
+          lastMessagePreview: String(lastMessage || "")
+            .replace(/\s+/g, " ")
+            .trim()
+            .slice(0, 180),
+          messageCount: 0,
+          messages: [],
+          chatMessages: [],
+          messagesJson: "[]",
+          createdAt: row.created_at,
+          created_at: row.created_at,
+          updatedAt: row.updated_at,
+          updated_at: row.updated_at,
+          profileId: row.profile_id,
+          profile_id: row.profile_id,
+        };
+      });
+    } else if (chatLookup.ok && Array.isArray(chatLookup.data)) {
       chatHistory = chatLookup.data.map((row) => {
         // For specialist chats, expose specialist_slug as categorySlug so that
         // existing dashboard cards can display something, while still including
@@ -782,20 +898,7 @@ export default async function handler(req, res) {
       hasAccount: (profile && profile.has_account) || false,
     };
 
-    console.log("[dashboard-data] Response summary:", {
-      email,
-      source: source || null,
-      isMobileHomepageRequest,
-      finalChatLimit,
-      finalGenerationLimit,
-      finalSavedGenerationLimit,
-      userAccessPresent: !!userAccess,
-      savedGenerationsCount: savedGenerations.length,
-      generationHistoryCount: generationHistory.length,
-      chatHistoryCount: chatHistory.length,
-    });
-
-    res.status(200).json({
+    const responsePayload = {
       success: true,
       source: "supabase",
       email,
@@ -806,7 +909,33 @@ export default async function handler(req, res) {
       generationHistory,
       chatHistory,
       warnings,
+    };
+
+    let responseSizeKb = 0;
+    try {
+      responseSizeKb = Math.round(
+        Buffer.byteLength(JSON.stringify(responsePayload), "utf8") / 1024,
+      );
+    } catch {
+      responseSizeKb = -1;
+    }
+
+    console.log("[dashboard-data] Response summary:", {
+      email,
+      source: source || null,
+      isMobileHomepageRequest,
+      isPreviewOnly,
+      finalChatLimit,
+      finalGenerationLimit,
+      finalSavedGenerationLimit,
+      userAccessPresent: !!userAccess,
+      savedGenerationsCount: savedGenerations.length,
+      generationHistoryCount: generationHistory.length,
+      chatHistoryCount: chatHistory.length,
+      responseSizeKb,
     });
+
+    res.status(200).json(responsePayload);
   } catch (error) {
     // Log the real cause to Vercel and surface it to the client so the failure
     // is debuggable instead of a generic 500. CORS headers were already set at
