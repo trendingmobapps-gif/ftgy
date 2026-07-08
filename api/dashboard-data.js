@@ -315,9 +315,9 @@ function cleanTitleInput(value) {
     .trim();
 }
 
-// Compacts any text into a very short title (max 6 words), stripping common
-// Romanian request prefixes and capitalizing the result. Returns "" if the
-// result would be empty or generic.
+// Compacts any text into a very short topic label (max 5 words, ideally 2-4),
+// stripping common Romanian request/description prefixes and capitalizing the
+// result. Returns "" if the result would be empty or generic.
 function compactChatTitle(value) {
   let clean = cleanTitleInput(value);
 
@@ -333,11 +333,22 @@ function compactChatTitle(value) {
     .replace(/^cum să\s+/i, "")
     .replace(/^te rog\s+/i, "")
     .replace(/^hai să\s+/i, "")
+    .replace(/^strategie de promovare pentru\s+/i, "Strategie ")
+    .replace(/^planificare pentru\s+/i, "")
+    .replace(/^analiză pentru\s+/i, "")
+    .replace(/^analiza pentru\s+/i, "")
+    .replace(/^idei pentru\s+/i, "Idei ")
+    .replace(/^sfaturi pentru\s+/i, "")
+    .replace(/^recomandări pentru\s+/i, "")
+    .replace(/^recomandari pentru\s+/i, "")
     .trim();
+
+  clean = clean.replace(/\s+/g, " ").trim();
 
   if (!clean || clean.length < 3) return "";
 
-  const words = clean.split(" ").filter(Boolean).slice(0, 6);
+  // Hard cap: maximum 5 words.
+  const words = clean.split(" ").filter(Boolean).slice(0, 5);
 
   let title = words.join(" ").replace(/[,:;.!?]+$/g, "").trim();
 
@@ -350,9 +361,41 @@ function compactChatTitle(value) {
   return title;
 }
 
+// True when a title still reads like a sentence/description rather than a
+// compact topic label: too many words or a request/description prefix.
+function isSentenceLikeTitle(title) {
+  const value = String(title || "").trim().toLowerCase();
+  const words = value.split(/\s+/).filter(Boolean);
+
+  if (words.length > 5) return true;
+
+  const badStarts = [
+    "cum să",
+    "cum pot",
+    "vreau să",
+    "aș vrea",
+    "as vrea",
+    "am nevoie",
+    "ajută-mă",
+    "spune-mi",
+    "explică-mi",
+    "strategie de promovare pentru",
+    "planificare pentru",
+    "analiză pentru",
+    "analiza pentru",
+    "idei pentru",
+    "sfaturi pentru",
+    "recomandări pentru",
+    "recomandari pentru",
+  ];
+
+  return badStarts.some((start) => value.startsWith(start));
+}
+
 // Resolves the compact topic title for a chat row. NEVER calls AI. Priority:
 // saved non-generic title → metadata title → first user message → preview.
-// Returns "" if no useful topic exists (caller applies "Chat nou").
+// Returns "" if no useful topic exists (caller applies "Chat nou"). Rejects
+// generic and sentence-like results at every step.
 function buildShortTopicTitle(row) {
   const metadata = parseMaybeJson(row.metadata) || {};
 
@@ -366,7 +409,7 @@ function buildShortTopicTitle(row) {
 
   for (const candidate of savedCandidates) {
     const compact = compactChatTitle(candidate);
-    if (compact && !isGenericChatTitle(compact)) {
+    if (compact && !isGenericChatTitle(compact) && !isSentenceLikeTitle(compact)) {
       return compact;
     }
   }
@@ -374,7 +417,7 @@ function buildShortTopicTitle(row) {
   const sourceText = getFirstUsefulUserText(row);
   const derived = compactChatTitle(sourceText);
 
-  if (derived && !isGenericChatTitle(derived)) {
+  if (derived && !isGenericChatTitle(derived) && !isSentenceLikeTitle(derived)) {
     return derived;
   }
 
@@ -1041,16 +1084,21 @@ export default async function handler(req, res) {
         const title = usefulChatTitle || "Chat nou";
 
         const metadataForLog = parseMaybeJson(row.metadata) || {};
-        console.log("[dashboard-data chat title debug]", {
+        console.log("[chat compact title]", {
           source: source || null,
           isPreviewOnly,
           chatSessionId: normalizedChatSessionId,
-          rawTitle: row.title,
-          rawChatTitle: row.chat_title || row.chatTitle,
-          metadataTitle: metadataForLog.chatTitle || metadataForLog.title,
+          rawCandidate: String(
+            row.chat_title ||
+              row.title ||
+              metadataForLog.chatTitle ||
+              getFirstUsefulUserText(row) ||
+              "",
+          ).slice(0, 80),
           finalTitle: title,
-          isFinalGeneric: isGenericChatTitle(title),
-          firstUserTextPreview: getFirstUsefulUserText(row).slice(0, 80),
+          wordCount: title.split(/\s+/).filter(Boolean).length,
+          isSentenceLike: isSentenceLikeTitle(title),
+          isGeneric: isGenericChatTitle(title),
         });
 
         return {
@@ -1141,16 +1189,21 @@ export default async function handler(req, res) {
         const title = usefulChatTitle || "Chat nou";
 
         const metadataForLog = parseMaybeJson(row.metadata) || {};
-        console.log("[dashboard-data chat title debug]", {
+        console.log("[chat compact title]", {
           source: source || null,
           isPreviewOnly,
           chatSessionId: normalizedChatSessionId,
-          rawTitle: row.title,
-          rawChatTitle: row.chat_title || row.chatTitle,
-          metadataTitle: metadataForLog.chatTitle || metadataForLog.title,
+          rawCandidate: String(
+            row.chat_title ||
+              row.title ||
+              metadataForLog.chatTitle ||
+              getFirstUsefulUserText(row) ||
+              "",
+          ).slice(0, 80),
           finalTitle: title,
-          isFinalGeneric: isGenericChatTitle(title),
-          firstUserTextPreview: getFirstUsefulUserText(row).slice(0, 80),
+          wordCount: title.split(/\s+/).filter(Boolean).length,
+          isSentenceLike: isSentenceLikeTitle(title),
+          isGeneric: isGenericChatTitle(title),
         });
 
         console.log("[dashboard-data chatHistory normalized item]", {

@@ -436,14 +436,55 @@ function compactChatTitle(value) {
     .replace(/^explică-mi\s+/i, "")
     .replace(/^cum pot să\s+/i, "")
     .replace(/^cum să\s+/i, "")
-    .replace(/^te rog\s+/i, "");
+    .replace(/^te rog\s+/i, "")
+    .replace(/^hai să\s+/i, "")
+    .replace(/^strategie de promovare pentru\s+/i, "Strategie ")
+    .replace(/^planificare pentru\s+/i, "")
+    .replace(/^analiză pentru\s+/i, "")
+    .replace(/^analiza pentru\s+/i, "")
+    .replace(/^idei pentru\s+/i, "Idei ")
+    .replace(/^sfaturi pentru\s+/i, "")
+    .replace(/^recomandări pentru\s+/i, "")
+    .replace(/^recomandari pentru\s+/i, "");
   clean = cleanTitleInput(clean);
   if (!clean || clean.length < 3) return "";
   const words = clean.split(" ").filter(Boolean);
-  let title = words.slice(0, 6).join(" ");
+  // Hard cap: maximum 5 words.
+  let title = words.slice(0, 5).join(" ");
   title = title.replace(/[,:;.!?]+$/g, "").trim();
   if (!title) return "";
   return title.charAt(0).toUpperCase() + title.slice(1);
+}
+
+// True when a title still reads like a sentence/description rather than a
+// compact topic label: too many words or a request/description prefix.
+function isSentenceLikeTitle(title) {
+  const value = String(title || "").trim().toLowerCase();
+  const words = value.split(/\s+/).filter(Boolean);
+
+  if (words.length > 5) return true;
+
+  const badStarts = [
+    "cum să",
+    "cum pot",
+    "vreau să",
+    "aș vrea",
+    "as vrea",
+    "am nevoie",
+    "ajută-mă",
+    "spune-mi",
+    "explică-mi",
+    "strategie de promovare pentru",
+    "planificare pentru",
+    "analiză pentru",
+    "analiza pentru",
+    "idei pentru",
+    "sfaturi pentru",
+    "recomandări pentru",
+    "recomandari pentru",
+  ];
+
+  return badStarts.some((start) => value.startsWith(start));
 }
 
 // Extracts a messages array from either an array or a chat row (any field).
@@ -514,29 +555,39 @@ async function generateShortChatTitleWithAI({ apiKey, messages, fallbackText }) 
       : [];
 
     const prompt = `
-Generează un titlu foarte scurt pentru această conversație.
+Generează un titlu foarte scurt pentru această conversație, ca titlurile din sidebar-ul ChatGPT.
 
-Reguli:
+Reguli stricte:
 - Limba română
-- 2-6 cuvinte maximum
-- Ideal 2-4 cuvinte
-- Fără propoziție lungă
-- Fără punct la final
-- Fără ghilimele
-- Fără markdown
-- Fără emoji
-- Fără "Chat", "Conversație", "ITER"
-- Titlul trebuie să spună clar subiectul conversației
+- 2-4 cuvinte ideal
+- Maximum 5 cuvinte
+- Nu scrie propoziție
+- Nu explica
+- Nu folosi punct la final
+- Nu folosi ghilimele
+- Nu folosi markdown
+- Nu folosi emoji
+- Nu începe cu „Cum să”
+- Nu începe cu „Cum pot”
+- Nu începe cu „Vreau să”
+- Nu începe cu „Am nevoie”
+- Nu folosi „Chat”, „Conversație”, „ITER”
+- Nu include categoria sau specialistul
+- Titlul trebuie să fie un label de topic, nu o descriere
 
 Exemple bune:
 Plan de afaceri
-Taxe SRL
 Lansare platformă AI
+Idei de afaceri
+Taxe SRL
+Reclame TikTok
 Simptome digestive
-Mesaj către client
 Strategie marketing
-Pregătire interviu
-Plan alimentar
+Mesaj către client
+Optimizare checkout
+Aplicație mobilă
+Contract colaborare
+Schimbare carieră
 
 Returnează doar titlul, nimic altceva.
 `;
@@ -549,8 +600,8 @@ Returnează doar titlul, nimic altceva.
       },
       body: JSON.stringify({
         model: "gpt-4o-mini",
-        temperature: 0.2,
-        max_tokens: 20,
+        temperature: 0.1,
+        max_tokens: 12,
         messages: [
           { role: "system", content: prompt },
           ...compactMessages,
@@ -576,8 +627,8 @@ Returnează doar titlul, nimic altceva.
     const cleanTitle = compactChatTitle(rawTitle);
     if (
       cleanTitle &&
-      cleanTitle.split(" ").filter(Boolean).length <= 6 &&
-      !isGenericChatTitle(cleanTitle)
+      !isGenericChatTitle(cleanTitle) &&
+      !isSentenceLikeTitle(cleanTitle)
     ) {
       return cleanTitle;
     }
@@ -590,28 +641,63 @@ Returnează doar titlul, nimic altceva.
   }
 }
 
-// Resolves the title to save: keep an existing useful title; otherwise try AI,
-// then deterministic fallback. Returns a compact (<=6 word) title or "".
+// Resolves the title to save: keep an existing useful (short, non-generic,
+// non-sentence) title; otherwise try AI, then a deterministic fallback. Always
+// enforces the compact/topic rules. Returns a <=5 word title or "".
 async function resolveShortChatTitleForSave({
   apiKey,
   existingTitle,
   messages,
 }) {
-  let shortChatTitle = existingTitle;
-  if (!shortChatTitle || isGenericChatTitle(shortChatTitle)) {
-    const deterministic = buildDeterministicShortChatTitle(messages);
+  const deterministic = buildDeterministicShortChatTitle(messages);
+
+  // Only reuse the existing saved title if it is already a good compact label.
+  const compactExisting = compactChatTitle(existingTitle);
+  const existingIsGood =
+    compactExisting &&
+    !isGenericChatTitle(compactExisting) &&
+    !isSentenceLikeTitle(compactExisting) &&
+    // Existing must be short at the source too, not just after compression.
+    !isSentenceLikeTitle(existingTitle);
+
+  let shortChatTitle = existingIsGood ? compactExisting : "";
+
+  if (!shortChatTitle) {
     const aiTitle = await generateShortChatTitleWithAI({
       apiKey,
       messages,
       fallbackText:
         getConversationTextForTitle(messages) || deterministic || "",
     });
-    shortChatTitle = aiTitle || deterministic || "";
+    shortChatTitle = compactChatTitle(aiTitle || deterministic || "");
   }
-  shortChatTitle = compactChatTitle(shortChatTitle);
-  if (!shortChatTitle || isGenericChatTitle(shortChatTitle)) {
+
+  // Final enforcement: reject generic or sentence-like results, then retry from
+  // the deterministic conversation text before giving up.
+  if (
+    !shortChatTitle ||
+    isGenericChatTitle(shortChatTitle) ||
+    isSentenceLikeTitle(shortChatTitle)
+  ) {
+    shortChatTitle = compactChatTitle(deterministic || "");
+  }
+  if (
+    !shortChatTitle ||
+    isGenericChatTitle(shortChatTitle) ||
+    isSentenceLikeTitle(shortChatTitle)
+  ) {
     shortChatTitle = "";
   }
+
+  console.log("[chat compact title]", {
+    source: "specialist-chat",
+    rawCandidate: String(existingTitle || deterministic || "").slice(0, 80),
+    finalTitle: shortChatTitle,
+    wordCount: shortChatTitle.split(/\s+/).filter(Boolean).length,
+    isSentenceLike: isSentenceLikeTitle(shortChatTitle),
+    isGeneric: isGenericChatTitle(shortChatTitle),
+  });
+
   return shortChatTitle;
 }
 
@@ -801,29 +887,17 @@ async function saveSpecialistChatToSupabase({
     const preview =
       typeof assistantReply === "string" ? assistantReply.slice(0, 100) : "";
 
-    // Resolve a very short (2-6 word) title. AI is only invoked when there is
-    // no existing useful title; otherwise the existing one is kept.
+    // Resolve a very short (2-4 word, max 5) topic title. AI is only invoked
+    // when there is no existing good title; the resolver enforces compactness.
     const shortChatTitle = await resolveShortChatTitleForSave({
       apiKey,
       existingTitle,
       messages: messagesJson,
     });
 
-    // The chat_title column must not be blank; fall back to a deterministic
-    // short title, then a generic label (dashboard-data re-derives generics).
-    const columnTitle =
-      shortChatTitle ||
-      buildDeterministicShortChatTitle(messagesJson) ||
-      `Specialist Chat - ${specialistName || specialistSlug}`;
-
-    console.log("[chat title compact]", {
-      chatSessionId,
-      source: "specialist-chat",
-      title: shortChatTitle || columnTitle,
-      wordCount: String(shortChatTitle || columnTitle || "")
-        .split(" ")
-        .filter(Boolean).length,
-    });
+    // The chat_title column must not be blank; fall back to "Chat nou" (never a
+    // generic specialist label). dashboard-data still re-derives on display.
+    const columnTitle = shortChatTitle || "Chat nou";
 
     const row = {
       email,
