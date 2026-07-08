@@ -148,52 +148,179 @@ function extractMessagesArray(row) {
 
 // --- Chat title helpers (ChatGPT-style, very short: 2-6 words) ------------
 // These derive a short Romanian title for a chat card WITHOUT calling any AI
-// model, so dashboard loading stays fast. AI titles are only produced by the
-// chat endpoints on save.
+// model, so dashboard loading stays fast (AI titles are only produced by the
+// chat endpoints on save). The goal is to NEVER show a generic category or
+// specialist label as the title — always a real topic derived from the
+// conversation, falling back to "Chat nou" only when no useful text exists.
 
-// Strips markdown/punctuation noise, trailing sentence punctuation, and
-// collapses whitespace.
+// Normalizes a title for generic-comparison: lowercased, diacritics stripped,
+// and separators (- _ : |) collapsed to spaces. This lets us catch hyphenated
+// variants like "Chat - Business" and diacritic variants like "Chat Carieră".
+function normalizeTitleForCompare(value) {
+  return String(value || "")
+    .toLowerCase()
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .replace(/[-_:|]+/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+// True when a title is empty or any generic auto-title (category/specialist
+// label), including hyphenated and diacritic variants.
+function isGenericChatTitle(title) {
+  const value = normalizeTitleForCompare(title);
+  if (!value) return true;
+
+  const exactGeneric = [
+    "chat",
+    "chat business",
+    "chat studii",
+    "chat cariera",
+    "chat fitness",
+    "chat finante",
+    "chat comunicare",
+    "chat social media",
+    "chat viata personala",
+    "chat categorie",
+    "chat specialist",
+    "specialist chat",
+    "conversatie iter",
+    "iter specialist",
+    "categorie business",
+    "categorie studii",
+    "categorie cariera",
+    "categorie fitness",
+    "categorie finante",
+    "categorie comunicare",
+    "categorie social media",
+    "categorie viata personala",
+    "specialist consultant juridic",
+    "specialist consultant medical",
+    "specialist consultant fiscal",
+    "specialist consultant financiar",
+    "specialist consultant business",
+    "specialist consultant marketing",
+    "specialist consultant cariera",
+    "specialist consultant fitness",
+    "specialist ghid auto",
+    "specialist ghid personal",
+    "specialist ghid claritate",
+    "specialist ghid arhitectura",
+    "specialist ghid constructii",
+    "specialist ghid design interior",
+  ];
+  if (exactGeneric.includes(value)) return true;
+
+  if (value.startsWith("chat ")) return true;
+  if (value.startsWith("chat categorie")) return true;
+  if (value.startsWith("specialist chat")) return true;
+  if (value.startsWith("iter specialist")) return true;
+  if (value.startsWith("categorie ")) return true;
+  if (value.startsWith("specialist consultant")) return true;
+  if (value.startsWith("specialist ghid")) return true;
+
+  return false;
+}
+
+// Parses a value that may be an object OR a JSON string into an object.
+function parseMaybeJson(value) {
+  if (!value) return null;
+  if (typeof value === "object") return value;
+  if (typeof value === "string") {
+    try {
+      return JSON.parse(value);
+    } catch {
+      return null;
+    }
+  }
+  return null;
+}
+
+// Extracts a messages array from a chat row for title derivation, tolerating
+// many field names and object/JSON-string shapes.
+function extractMessagesForTitle(row) {
+  const sources = [
+    row.messages,
+    row.chat_messages,
+    row.conversation,
+    row.messagesJson,
+    row.messages_json,
+    row.conversationJson,
+    row.conversation_json,
+    parseMaybeJson(row.metadata)?.messages,
+    parseMaybeJson(row.metadata)?.chatMessages,
+    parseMaybeJson(row.metadata)?.conversation,
+  ];
+
+  for (const source of sources) {
+    try {
+      if (Array.isArray(source)) return source;
+      if (typeof source === "string" && source.trim()) {
+        const parsed = JSON.parse(source);
+        if (Array.isArray(parsed)) return parsed;
+        if (parsed?.messages && Array.isArray(parsed.messages))
+          return parsed.messages;
+        if (parsed?.chatMessages && Array.isArray(parsed.chatMessages))
+          return parsed.chatMessages;
+        if (parsed?.conversation && Array.isArray(parsed.conversation))
+          return parsed.conversation;
+      }
+    } catch (error) {}
+  }
+
+  return [];
+}
+
+// Returns the best raw text to summarize: the first few meaningful user
+// messages, else stored preview/prompt fields.
+function getFirstUsefulUserText(row) {
+  const messages = extractMessagesForTitle(row);
+
+  const userMessages = messages
+    .filter((msg) => {
+      const role = String(
+        msg.role || msg.sender || msg.author || "",
+      ).toLowerCase();
+      const content = msg.content || msg.message || msg.text || msg.body || "";
+      return role === "user" && String(content).trim().length > 5;
+    })
+    .map((msg) => msg.content || msg.message || msg.text || msg.body)
+    .slice(0, 3);
+
+  if (userMessages.length > 0) {
+    return userMessages.join(" ");
+  }
+
+  return (
+    row.firstUserMessage ||
+    row.user_message ||
+    row.prompt ||
+    row.last_message_preview ||
+    row.lastMessagePreview ||
+    row.last_message ||
+    row.lastMessage ||
+    row.preview ||
+    ""
+  );
+}
+
+// Strips markdown/punctuation noise, trailing sentence punctuation, and quote
+// characters, then collapses whitespace.
 function cleanTitleInput(value) {
   return String(value || "")
-    .replace(/[#*_`>\[\](){}]/g, "")
+    .replace(/[#*_`>\[\](){}"“”„]/g, "")
     .replace(/[.!?]+$/g, "")
     .replace(/\s+/g, " ")
     .trim();
 }
 
-// True when a title is empty or an exact generic auto-title that must be
-// replaced by a real topic title.
-function isGenericChatTitle(title) {
-  const value = String(title || "").trim().toLowerCase();
-  if (!value) return true;
-  const genericPatterns = [
-    "chat business",
-    "chat studii",
-    "chat carieră",
-    "chat cariera",
-    "chat fitness",
-    "chat finanțe",
-    "chat finante",
-    "chat comunicare",
-    "chat social media",
-    "chat viață personală",
-    "chat viata personala",
-    "conversație iter",
-    "conversatie iter",
-    "chat categorie",
-    "chat specialist",
-    "iter specialist",
-    "specialist",
-    "categorie",
-    "chat iter",
-  ];
-  return genericPatterns.includes(value);
-}
-
 // Compacts any text into a very short title (max 6 words), stripping common
-// Romanian request prefixes and capitalizing the result.
+// Romanian request prefixes and capitalizing the result. Returns "" if the
+// result would be empty or generic.
 function compactChatTitle(value) {
   let clean = cleanTitleInput(value);
+
   clean = clean
     .replace(/^vreau să\s+/i, "")
     .replace(/^as vrea să\s+/i, "")
@@ -204,90 +331,54 @@ function compactChatTitle(value) {
     .replace(/^explică-mi\s+/i, "")
     .replace(/^cum pot să\s+/i, "")
     .replace(/^cum să\s+/i, "")
-    .replace(/^te rog\s+/i, "");
-  clean = cleanTitleInput(clean);
+    .replace(/^te rog\s+/i, "")
+    .replace(/^hai să\s+/i, "")
+    .trim();
+
   if (!clean || clean.length < 3) return "";
-  const words = clean.split(" ").filter(Boolean);
-  let title = words.slice(0, 6).join(" ");
-  title = title.replace(/[,:;.!?]+$/g, "").trim();
+
+  const words = clean.split(" ").filter(Boolean).slice(0, 6);
+
+  let title = words.join(" ").replace(/[,:;.!?]+$/g, "").trim();
+
   if (!title) return "";
-  return title.charAt(0).toUpperCase() + title.slice(1);
+
+  title = title.charAt(0).toUpperCase() + title.slice(1);
+
+  if (isGenericChatTitle(title)) return "";
+
+  return title;
 }
 
-// Extracts a messages array from either an array or a chat row (any field).
-function messagesArrayForTitle(rowOrMessages) {
-  if (Array.isArray(rowOrMessages)) return rowOrMessages;
-  const row = rowOrMessages || {};
-  const sources = [
-    row.messages_json,
-    row.messages,
-    row.chat_messages,
-    row.conversation,
-    row.metadata?.messages,
+// Resolves the compact topic title for a chat row. NEVER calls AI. Priority:
+// saved non-generic title → metadata title → first user message → preview.
+// Returns "" if no useful topic exists (caller applies "Chat nou").
+function buildShortTopicTitle(row) {
+  const metadata = parseMaybeJson(row.metadata) || {};
+
+  const savedCandidates = [
+    row.chat_title,
+    row.chatTitle,
+    row.title,
+    metadata.chatTitle,
+    metadata.title,
   ];
-  for (const source of sources) {
-    try {
-      if (Array.isArray(source)) return source;
-      if (typeof source === "string" && source.trim()) {
-        const parsed = JSON.parse(source);
-        if (Array.isArray(parsed)) return parsed;
-      }
-    } catch (error) {}
-  }
-  return [];
-}
 
-// Returns the best raw text to summarize: the first few user messages, else the
-// stored last-message preview.
-function getConversationTextForTitle(rowOrMessages) {
-  const messages = messagesArrayForTitle(rowOrMessages);
-  const userMessages = messages
-    .filter((msg) => {
-      const role = String(msg.role || msg.sender || "").toLowerCase();
-      const content = msg.content || msg.message || msg.text || "";
-      return role === "user" && String(content).trim().length > 4;
-    })
-    .map((msg) => msg.content || msg.message || msg.text)
-    .slice(0, 4);
-  if (userMessages.length > 0) return userMessages.join(" ");
-  const row = Array.isArray(rowOrMessages) ? {} : rowOrMessages || {};
-  return (
-    row.last_message_preview ||
-    row.lastMessagePreview ||
-    row.last_message ||
-    row.lastMessage ||
-    row.preview ||
-    ""
-  );
-}
-
-// Deterministic (no AI) short title from conversation text.
-function buildDeterministicShortChatTitle(rowOrMessages) {
-  return compactChatTitle(getConversationTextForTitle(rowOrMessages));
-}
-
-// Resolves the compact title for a chat row (Part 3 priority). NEVER calls AI:
-// saved short title → deterministic from messages/preview → generic fallback.
-function resolveCompactChatTitle({ row, chatType }) {
-  const usefulTitleCandidate =
-    row.chat_title ||
-    row.chatTitle ||
-    row.metadata?.chatTitle ||
-    row.metadata?.title ||
-    (!isGenericChatTitle(row.title) ? row.title : "");
-
-  let usefulChatTitle = compactChatTitle(usefulTitleCandidate);
-
-  if (!usefulChatTitle || isGenericChatTitle(usefulChatTitle)) {
-    usefulChatTitle = buildDeterministicShortChatTitle(row);
+  for (const candidate of savedCandidates) {
+    const compact = compactChatTitle(candidate);
+    if (compact && !isGenericChatTitle(compact)) {
+      return compact;
+    }
   }
 
-  if (!usefulChatTitle || isGenericChatTitle(usefulChatTitle)) {
-    usefulChatTitle =
-      chatType === "specialist" ? "Chat specialist" : "Chat categorie";
+  const sourceText = getFirstUsefulUserText(row);
+  const derived = compactChatTitle(sourceText);
+
+  if (derived && !isGenericChatTitle(derived)) {
+    return derived;
   }
 
-  return usefulChatTitle;
+  return "";
 }
 
 // Safely stringify a JSON-ish value, falling back to a default string.
@@ -943,19 +1034,23 @@ export default async function handler(req, res) {
 
         const lastMessage = row.last_message_preview || "";
 
-        // Derive the compact title internally from the full row (messages_json
-        // is present because select=*). NO AI call here. DO NOT return the
+        // Derive the compact topic title internally from the full row (messages
+        // are present because select=*). NO AI call here. DO NOT return the
         // messages to the mobile homepage — messages arrays stay empty below.
-        const title = resolveCompactChatTitle({
-          row,
-          chatType: row.chat_type,
-        });
+        const usefulChatTitle = buildShortTopicTitle(row);
+        const title = usefulChatTitle || "Chat nou";
 
-        console.log("[chat title compact]", {
+        const metadataForLog = parseMaybeJson(row.metadata) || {};
+        console.log("[dashboard-data chat title debug]", {
+          source: source || null,
+          isPreviewOnly,
           chatSessionId: normalizedChatSessionId,
-          source: "dashboard-data",
-          title,
-          wordCount: String(title || "").split(" ").filter(Boolean).length,
+          rawTitle: row.title,
+          rawChatTitle: row.chat_title || row.chatTitle,
+          metadataTitle: metadataForLog.chatTitle || metadataForLog.title,
+          finalTitle: title,
+          isFinalGeneric: isGenericChatTitle(title),
+          firstUserTextPreview: getFirstUsefulUserText(row).slice(0, 80),
         });
 
         return {
@@ -988,6 +1083,7 @@ export default async function handler(req, res) {
           messageCount: 0,
           messages: [],
           chatMessages: [],
+          conversation: [],
           messagesJson: "[]",
           createdAt: row.created_at,
           created_at: row.created_at,
@@ -1039,18 +1135,22 @@ export default async function handler(req, res) {
             : "";
         const lastMessage = row.last_message_preview || derivedLast || "";
 
-        // Compact title (max 6 words), no AI. messages_json is present so the
-        // deterministic fallback can read the conversation for old chats.
-        const title = resolveCompactChatTitle({
-          row,
-          chatType: row.chat_type,
-        });
+        // Compact topic title (max 6 words), no AI. Full messages are present
+        // so the derivation can read the conversation for old chats.
+        const usefulChatTitle = buildShortTopicTitle(row);
+        const title = usefulChatTitle || "Chat nou";
 
-        console.log("[chat title compact]", {
+        const metadataForLog = parseMaybeJson(row.metadata) || {};
+        console.log("[dashboard-data chat title debug]", {
+          source: source || null,
+          isPreviewOnly,
           chatSessionId: normalizedChatSessionId,
-          source: "dashboard-data",
-          title,
-          wordCount: String(title || "").split(" ").filter(Boolean).length,
+          rawTitle: row.title,
+          rawChatTitle: row.chat_title || row.chatTitle,
+          metadataTitle: metadataForLog.chatTitle || metadataForLog.title,
+          finalTitle: title,
+          isFinalGeneric: isGenericChatTitle(title),
+          firstUserTextPreview: getFirstUsefulUserText(row).slice(0, 80),
         });
 
         console.log("[dashboard-data chatHistory normalized item]", {
