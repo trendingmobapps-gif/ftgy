@@ -771,7 +771,7 @@ export default async function handler(req, res) {
   setCorsHeaders(req, res);
 
   if (req.method === "OPTIONS") {
-    res.status(200).end();
+    res.status(204).end();
     return;
   }
 
