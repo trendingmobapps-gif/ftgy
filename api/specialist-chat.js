@@ -352,33 +352,74 @@ function cleanTitleInput(value) {
     .trim();
 }
 
-// True when a title is empty or an exact generic auto-title that must be
-// replaced by a real topic title.
+// Normalizes a title for generic-comparison: lowercased, diacritics stripped,
+// separators (- _ : |) collapsed to spaces. Catches hyphenated/diacritic
+// variants like "Chat - Business" and "Chat Carieră".
+function normalizeTitleForCompare(value) {
+  return String(value || "")
+    .toLowerCase()
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .replace(/[-_:|]+/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+// True when a title is empty or any generic auto-title (category/specialist
+// label), including hyphenated and diacritic variants.
 function isGenericChatTitle(title) {
-  const value = String(title || "").trim().toLowerCase();
+  const value = normalizeTitleForCompare(title);
   if (!value) return true;
-  const genericPatterns = [
+
+  const exactGeneric = [
+    "chat",
     "chat business",
     "chat studii",
-    "chat carieră",
     "chat cariera",
     "chat fitness",
-    "chat finanțe",
     "chat finante",
     "chat comunicare",
     "chat social media",
-    "chat viață personală",
     "chat viata personala",
-    "conversație iter",
-    "conversatie iter",
     "chat categorie",
     "chat specialist",
+    "specialist chat",
+    "conversatie iter",
     "iter specialist",
-    "specialist",
-    "categorie",
-    "chat iter",
+    "categorie business",
+    "categorie studii",
+    "categorie cariera",
+    "categorie fitness",
+    "categorie finante",
+    "categorie comunicare",
+    "categorie social media",
+    "categorie viata personala",
+    "specialist consultant juridic",
+    "specialist consultant medical",
+    "specialist consultant fiscal",
+    "specialist consultant financiar",
+    "specialist consultant business",
+    "specialist consultant marketing",
+    "specialist consultant cariera",
+    "specialist consultant fitness",
+    "specialist ghid auto",
+    "specialist ghid personal",
+    "specialist ghid claritate",
+    "specialist ghid arhitectura",
+    "specialist ghid constructii",
+    "specialist ghid design interior",
   ];
-  return genericPatterns.includes(value);
+  if (exactGeneric.includes(value)) return true;
+
+  if (value.startsWith("chat ")) return true;
+  if (value.startsWith("chat categorie")) return true;
+  if (value.startsWith("specialist chat")) return true;
+  if (value.startsWith("iter specialist")) return true;
+  if (value.startsWith("categorie ")) return true;
+  if (value.startsWith("specialist consultant")) return true;
+  if (value.startsWith("specialist ghid")) return true;
+
+  return false;
 }
 
 // Compacts any text into a very short title (max 6 words), stripping common
