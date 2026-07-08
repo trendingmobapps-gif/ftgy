@@ -341,6 +341,73 @@ function firstNonEmpty(...candidates) {
   return "";
 }
 
+// --- Chat title helpers (no AI; derived from the first user message) ---
+function cleanTextForTitle(value) {
+  return String(value || "")
+    .replace(/[#*_`>\[\]()]/g, "")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+function extractFirstMeaningfulUserMessage(messages = []) {
+  if (!Array.isArray(messages)) return "";
+  const userMessage = messages.find((msg) => {
+    if (!msg || typeof msg !== "object") return false;
+    const role = String(msg.role || msg.sender || "").toLowerCase();
+    const content = msg.content || msg.message || msg.text || "";
+    return role === "user" && String(content).trim().length > 5;
+  });
+  if (!userMessage) return "";
+  return userMessage.content || userMessage.message || userMessage.text || "";
+}
+
+// True when a title is empty or a generic auto-title that should be replaced.
+function isGenericChatTitle(title) {
+  const t = cleanTextForTitle(title).toLowerCase();
+  if (!t || t.length <= 3) return true;
+  return (
+    t === "chat iter" ||
+    t.startsWith("chat -") ||
+    t.startsWith("chat-") ||
+    /^chat\s+\S/.test(t) ||
+    t.startsWith("conversație iter") ||
+    t.startsWith("conversatie iter") ||
+    t.startsWith("specialist chat") ||
+    t.startsWith("iter specialist")
+  );
+}
+
+// Builds a short Romanian topic title (max 10 words) from message text.
+function deriveTitleFromText(source) {
+  const clean = cleanTextForTitle(source);
+  if (!clean) return "";
+  const title = clean
+    .replace(/^vreau să\s+/i, "")
+    .replace(/^aș vrea să\s+/i, "")
+    .replace(/^as vrea să\s+/i, "")
+    .replace(/^am nevoie de\s+/i, "")
+    .replace(/^ajută-mă să\s+/i, "")
+    .replace(/^ajuta-ma să\s+/i, "")
+    .replace(/^spune-mi\s+/i, "");
+  const words = title.split(" ").filter(Boolean).slice(0, 10);
+  const finalTitle = words.join(" ");
+  if (!finalTitle) return "";
+  return finalTitle.charAt(0).toUpperCase() + finalTitle.slice(1);
+}
+
+// Resolves the title to save: keep an existing useful title, otherwise derive a
+// topic title from the first meaningful user message; else use the fallback.
+function resolveChatTitleForSave({ existingTitle, messages, fallback }) {
+  if (existingTitle && !isGenericChatTitle(existingTitle)) {
+    return cleanTextForTitle(existingTitle).slice(0, 90);
+  }
+  const derived = deriveTitleFromText(
+    extractFirstMeaningfulUserMessage(messages),
+  );
+  if (derived) return derived.slice(0, 90);
+  return existingTitle || fallback;
+}
+
 // Builds the base URL of the incoming request so internal API calls target the
 // same host/deployment instead of a hardcoded domain.
 function getRequestBaseUrl(req) {
@@ -520,6 +587,20 @@ async function saveSpecialistChatToSupabase({
     const preview =
       typeof assistantReply === "string" ? assistantReply.slice(0, 100) : "";
 
+    // Derive a topic title once, from the first meaningful user message, unless
+    // a useful (non-generic) title already exists. Never calls AI.
+    const resolvedTitle = resolveChatTitleForSave({
+      existingTitle,
+      messages: messagesJson,
+      fallback: `Specialist Chat - ${specialistName || specialistSlug}`,
+    });
+
+    console.log("[chat title generated]", {
+      chatSessionId,
+      source: "specialist-chat",
+      title: resolvedTitle,
+    });
+
     const row = {
       email,
       wix_item_id: chatSessionId,
@@ -528,9 +609,7 @@ async function saveSpecialistChatToSupabase({
       category_slug: null,
       category_name: specialistName || null,
       specialist_slug: specialistSlug,
-      chat_title:
-        existingTitle ||
-        `Specialist Chat - ${specialistName || specialistSlug}`,
+      chat_title: resolvedTitle,
       messages_json: Array.isArray(messagesJson) ? messagesJson : [],
       tools_json: [],
       last_message_preview: preview,
@@ -540,6 +619,7 @@ async function saveSpecialistChatToSupabase({
         lastIdempotencyKey: idempotencyKey || null,
         accessType: accessType || null,
         updatedFrom: "specialist_chat",
+        chatTitle: resolvedTitle,
       },
       updated_at: new Date().toISOString(),
     };
