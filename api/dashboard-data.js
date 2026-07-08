@@ -28,15 +28,15 @@ function setCorsHeaders(req, res) {
     : "https://www.iterai.ro";
 
   res.setHeader("Access-Control-Allow-Origin", allowedOrigin);
-  res.setHeader("Access-Control-Allow-Methods", "POST, OPTIONS");
-  res.setHeader(
-    "Access-Control-Allow-Headers",
-    "Content-Type, Authorization, x-iter-secret",
-  );
-  res.setHeader("Access-Control-Max-Age", "86400");
   // Vary on Origin so caches don't serve the wrong allow-origin to a different
   // origin.
   res.setHeader("Vary", "Origin");
+  res.setHeader("Access-Control-Allow-Methods", "GET, POST, OPTIONS");
+  res.setHeader(
+    "Access-Control-Allow-Headers",
+    "Content-Type, Authorization, x-iter-secret, Cache-Control, Pragma, X-Requested-With",
+  );
+  res.setHeader("Access-Control-Max-Age", "86400");
 }
 
 // Picks the first non-empty string from a list of candidate values.
