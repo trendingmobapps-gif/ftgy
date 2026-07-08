@@ -706,12 +706,82 @@ export default async function handler(req, res) {
     const chatSelect = isPreviewOnly
       ? "id,wix_item_id,chat_session_id,chat_type,category_slug,specialist_slug,category_name,chat_title,last_message_preview,member_id,email,profile_id,created_at,updated_at"
       : "*";
-    const chatLookup = await supabaseSelect({
+
+    // Resolve a profile id to use as a fallback filter. Some chat_sessions rows
+    // are saved with a profile_id but a missing/empty email, so an email-only
+    // query can miss them.
+    const chatProfileId =
+      profileId ||
+      userAccess?.profile_id ||
+      userAccess?.profileId ||
+      null;
+
+    console.log("[dashboard-data chat debug request]", {
+      email,
+      memberId,
+      source: source || null,
+      previewOnly: isPreviewOnly,
+      isMobileHomepageRequest,
+      finalChatLimit,
+      userAccessProfileId: userAccess?.profile_id || userAccess?.profileId,
+      resolvedChatProfileId: chatProfileId,
+    });
+
+    // 7a. Primary query: by email.
+    let chatLookup = await supabaseSelect({
       baseUrl,
       secretKey,
       table: "chat_sessions",
       query: `email=eq.${encodedEmail}&order=updated_at.desc&limit=${finalChatLimit}&select=${chatSelect}`,
     });
+
+    console.log("[dashboard-data chat by email]", {
+      ok: chatLookup.ok,
+      status: chatLookup.status,
+      count: Array.isArray(chatLookup.data) ? chatLookup.data.length : 0,
+      email,
+    });
+
+    // 7b. Fallback: if the email query returned no rows and we have a profile
+    // id, re-query by profile_id. This recovers chats saved without an email.
+    if (
+      chatProfileId &&
+      chatLookup.ok &&
+      Array.isArray(chatLookup.data) &&
+      chatLookup.data.length === 0
+    ) {
+      const chatByProfile = await supabaseSelect({
+        baseUrl,
+        secretKey,
+        table: "chat_sessions",
+        query: `profile_id=eq.${encodeURIComponent(chatProfileId)}&order=updated_at.desc&limit=${finalChatLimit}&select=${chatSelect}`,
+      });
+
+      console.log("[dashboard-data chat by profile_id fallback]", {
+        ok: chatByProfile.ok,
+        status: chatByProfile.status,
+        count: Array.isArray(chatByProfile.data)
+          ? chatByProfile.data.length
+          : 0,
+        profileId: chatProfileId,
+      });
+
+      // Only adopt the fallback result when it actually succeeded.
+      if (chatByProfile.ok && Array.isArray(chatByProfile.data)) {
+        chatLookup = chatByProfile;
+      }
+    }
+
+    console.log("[dashboard-data chat debug result]", {
+      chatResponseOk: chatLookup.ok,
+      chatResponseStatus: chatLookup.status,
+      rawChatCount: Array.isArray(chatLookup.data) ? chatLookup.data.length : 0,
+      firstChatKeys:
+        Array.isArray(chatLookup.data) && chatLookup.data[0]
+          ? Object.keys(chatLookup.data[0])
+          : [],
+    });
+
     if (chatLookup.ok && Array.isArray(chatLookup.data) && isPreviewOnly) {
       // Lightweight chat previews: NO message parsing, NO per-item logging, NO
       // conversation/metadata. Empty messages arrays so mobile cards render.
@@ -918,6 +988,23 @@ export default async function handler(req, res) {
       );
     } catch {
       responseSizeKb = -1;
+    }
+
+    if (isPreviewOnly) {
+      console.log("[dashboard-data mobile-homepage chat previews]", {
+        source: source || null,
+        isPreviewOnly,
+        chatHistoryCount: chatHistory.length,
+        sample: chatHistory.slice(0, 3).map((chat) => ({
+          id: chat.id,
+          chatSessionId: chat.chatSessionId,
+          categorySlug: chat.categorySlug,
+          title: chat.title,
+          preview: chat.lastMessagePreview,
+          hasMessagesReturned:
+            Array.isArray(chat.messages) && chat.messages.length > 0,
+        })),
+      });
     }
 
     console.log("[dashboard-data] Response summary:", {
