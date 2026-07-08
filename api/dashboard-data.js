@@ -700,12 +700,13 @@ export default async function handler(req, res) {
 
     // --- 7. chat_sessions (Wix-compatible shape). ---
     let chatHistory = [];
-    // In preview-only mode we select only the light columns needed for a card
-    // (never messages_json / tools_json / heavy blobs), which keeps the payload
-    // small. Normal mode keeps select=* so full history is unchanged.
-    const chatSelect = isPreviewOnly
-      ? "id,wix_item_id,chat_session_id,chat_type,category_slug,specialist_slug,category_name,chat_title,last_message_preview,member_id,email,profile_id,created_at,updated_at"
-      : "*";
+    // Use select=* for BOTH modes. A narrowed column list is fragile: if any
+    // requested column does not exist in the schema (e.g. specialist_slug),
+    // PostgREST returns an error and zero rows, which is exactly what made the
+    // mobile-homepage chatHistory come back empty. The payload stays small in
+    // preview mode because the preview map below strips heavy fields and returns
+    // empty messages arrays regardless of what was fetched.
+    const chatSelect = "*";
 
     // Resolve a profile id to use as a fallback filter. Some chat_sessions rows
     // are saved with a profile_id but a missing/empty email, so an email-only
