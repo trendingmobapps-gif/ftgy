@@ -146,6 +146,105 @@ function extractMessagesArray(row) {
   return [];
 }
 
+// --- Chat title helpers ---------------------------------------------------
+// These derive a short, human-readable Romanian title for a chat card WITHOUT
+// calling any AI model, so dashboard loading stays fast.
+
+// Strips markdown/punctuation noise and collapses whitespace.
+function cleanTextForTitle(value) {
+  return String(value || "")
+    .replace(/[#*_`>\[\]()]/g, "")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+// Finds the first user message with meaningful content (>5 chars).
+function extractFirstMeaningfulUserMessage(messages = []) {
+  if (!Array.isArray(messages)) return "";
+  const userMessage = messages.find((msg) => {
+    if (!msg || typeof msg !== "object") return false;
+    const role = String(msg.role || msg.sender || "").toLowerCase();
+    const content = msg.content || msg.message || msg.text || "";
+    return role === "user" && String(content).trim().length > 5;
+  });
+  if (!userMessage) return "";
+  return (
+    userMessage.content || userMessage.message || userMessage.text || ""
+  );
+}
+
+// True when a title is empty or a generic auto-title (e.g. "Chat Business",
+// "Chat - general", "Specialist Chat - ...", "Conversație ITER"). These should
+// be replaced by a topic-based title whenever real content exists.
+function isGenericChatTitle(title) {
+  const t = cleanTextForTitle(title).toLowerCase();
+  if (!t || t.length <= 3) return true;
+  return (
+    t === "chat iter" ||
+    t.startsWith("chat -") ||
+    t.startsWith("chat-") ||
+    /^chat\s+\S/.test(t) ||
+    t.startsWith("conversație iter") ||
+    t.startsWith("conversatie iter") ||
+    t.startsWith("specialist chat") ||
+    t.startsWith("iter specialist")
+  );
+}
+
+// Turns a raw message/preview into a short topic title (max 10 words),
+// stripping common Romanian request prefixes and capitalizing the result.
+function deriveTitleFromText(source) {
+  const clean = cleanTextForTitle(source);
+  if (!clean) return "";
+  const title = clean
+    .replace(/^vreau să\s+/i, "")
+    .replace(/^aș vrea să\s+/i, "")
+    .replace(/^as vrea să\s+/i, "")
+    .replace(/^am nevoie de\s+/i, "")
+    .replace(/^ajută-mă să\s+/i, "")
+    .replace(/^ajuta-ma să\s+/i, "")
+    .replace(/^spune-mi\s+/i, "");
+  const words = title.split(" ").filter(Boolean).slice(0, 10);
+  const finalTitle = words.join(" ");
+  if (!finalTitle) return "";
+  return finalTitle.charAt(0).toUpperCase() + finalTitle.slice(1);
+}
+
+// Resolves the best title for a chat row: saved useful title → topic derived
+// from first user message / last message → generic fallback. Never calls AI.
+function resolveChatTitle({ row, messages, genericFallback }) {
+  const existingTitle =
+    row.chat_title ||
+    row.chatTitle ||
+    row.title ||
+    (row.metadata && (row.metadata.chatTitle || row.metadata.title)) ||
+    "";
+
+  // 1. Keep an existing useful (non-generic) title.
+  if (existingTitle && !isGenericChatTitle(existingTitle)) {
+    return cleanTextForTitle(existingTitle).slice(0, 90);
+  }
+
+  // 2. Derive a topic title from the first user message or last message.
+  const firstUserMessage = extractFirstMeaningfulUserMessage(messages);
+  const source =
+    firstUserMessage ||
+    row.last_message_preview ||
+    row.lastMessagePreview ||
+    row.last_message ||
+    row.lastMessage ||
+    "";
+  const derived = deriveTitleFromText(source);
+  if (derived) return derived.slice(0, 90);
+
+  // 3. Generic fallback (existing generic title, category name, or default).
+  return (
+    (existingTitle && cleanTextForTitle(existingTitle)) ||
+    genericFallback ||
+    "Chat ITER"
+  );
+}
+
 // Safely stringify a JSON-ish value, falling back to a default string.
 function safeStringify(value, fallback) {
   try {
@@ -799,7 +898,21 @@ export default async function handler(req, res) {
 
         const lastMessage = row.last_message_preview || "";
 
-        const title = row.chat_title || row.category_name || "Chat ITER";
+        // Derive the title internally from the full row (messages_json is
+        // present because select=*), but DO NOT return the messages to the
+        // mobile homepage — messages arrays stay empty below.
+        const previewMessages = extractMessagesArray(row);
+        const title = resolveChatTitle({
+          row,
+          messages: previewMessages,
+          genericFallback: row.category_name || "Chat ITER",
+        });
+
+        console.log("[chat title generated]", {
+          chatSessionId: normalizedChatSessionId,
+          source: "dashboard-data",
+          title,
+        });
 
         return {
           _id: row.wix_item_id || row.id,
@@ -816,6 +929,8 @@ export default async function handler(req, res) {
           specialistSlug: row.specialist_slug || "",
           categoryName: row.category_name || "",
           title,
+          chatTitle: title,
+          chat_title: title,
           chatSessionId: normalizedChatSessionId,
           chat_session_id: normalizedChatSessionId,
           wixItemId: normalizedChatSessionId,
@@ -880,7 +995,17 @@ export default async function handler(req, res) {
             : "";
         const lastMessage = row.last_message_preview || derivedLast || "";
 
-        const title = row.chat_title || row.category_name || "Chat ITER";
+        const title = resolveChatTitle({
+          row,
+          messages: fullMessagesArray,
+          genericFallback: row.category_name || "Chat ITER",
+        });
+
+        console.log("[chat title generated]", {
+          chatSessionId: normalizedChatSessionId,
+          source: "dashboard-data",
+          title,
+        });
 
         console.log("[dashboard-data chatHistory normalized item]", {
           rowId: row.id,
@@ -921,6 +1046,8 @@ export default async function handler(req, res) {
           specialistSlug: row.specialist_slug || "",
           categoryName: row.category_name || "",
           title,
+          chatTitle: title,
+          chat_title: title,
           messagesJson: safeStringify(fullMessagesArray, "[]"),
           toolsJson: safeStringify(row.tools_json || [], "[]"),
           lastMessagePreview: row.last_message_preview || "",
