@@ -318,71 +318,237 @@ function firstNonEmptyArray(...candidates) {
   return [];
 }
 
-// --- Chat title helpers (no AI; derived from the first user message) ---
-function cleanTextForTitle(value) {
+// --- Chat title helpers (ChatGPT-style, very short: 2-6 words) ------------
+// Strips markdown/punctuation noise, trailing sentence punctuation, and
+// collapses whitespace.
+function cleanTitleInput(value) {
   return String(value || "")
-    .replace(/[#*_`>\[\]()]/g, "")
+    .replace(/[#*_`>\[\](){}]/g, "")
+    .replace(/[.!?]+$/g, "")
     .replace(/\s+/g, " ")
     .trim();
 }
 
-function extractFirstMeaningfulUserMessage(messages = []) {
-  if (!Array.isArray(messages)) return "";
-  const userMessage = messages.find((msg) => {
-    if (!msg || typeof msg !== "object") return false;
-    const role = String(msg.role || msg.sender || "").toLowerCase();
-    const content = msg.content || msg.message || msg.text || "";
-    return role === "user" && String(content).trim().length > 5;
-  });
-  if (!userMessage) return "";
-  return userMessage.content || userMessage.message || userMessage.text || "";
-}
-
-// True when a title is empty or a generic auto-title that should be replaced.
+// True when a title is empty or an exact generic auto-title that must be
+// replaced by a real topic title.
 function isGenericChatTitle(title) {
-  const t = cleanTextForTitle(title).toLowerCase();
-  if (!t || t.length <= 3) return true;
-  return (
-    t === "chat iter" ||
-    t.startsWith("chat -") ||
-    t.startsWith("chat-") ||
-    /^chat\s+\S/.test(t) ||
-    t.startsWith("conversație iter") ||
-    t.startsWith("conversatie iter") ||
-    t.startsWith("specialist chat") ||
-    t.startsWith("iter specialist")
-  );
+  const value = String(title || "").trim().toLowerCase();
+  if (!value) return true;
+  const genericPatterns = [
+    "chat business",
+    "chat studii",
+    "chat carieră",
+    "chat cariera",
+    "chat fitness",
+    "chat finanțe",
+    "chat finante",
+    "chat comunicare",
+    "chat social media",
+    "chat viață personală",
+    "chat viata personala",
+    "conversație iter",
+    "conversatie iter",
+    "chat categorie",
+    "chat specialist",
+    "iter specialist",
+    "specialist",
+    "categorie",
+    "chat iter",
+  ];
+  return genericPatterns.includes(value);
 }
 
-// Builds a short Romanian topic title (max 10 words) from message text.
-function deriveTitleFromText(source) {
-  const clean = cleanTextForTitle(source);
-  if (!clean) return "";
-  const title = clean
+// Compacts any text into a very short title (max 6 words), stripping common
+// Romanian request prefixes and capitalizing the result.
+function compactChatTitle(value) {
+  let clean = cleanTitleInput(value);
+  clean = clean
     .replace(/^vreau să\s+/i, "")
-    .replace(/^aș vrea să\s+/i, "")
     .replace(/^as vrea să\s+/i, "")
+    .replace(/^aș vrea să\s+/i, "")
     .replace(/^am nevoie de\s+/i, "")
     .replace(/^ajută-mă să\s+/i, "")
-    .replace(/^ajuta-ma să\s+/i, "")
-    .replace(/^spune-mi\s+/i, "");
-  const words = title.split(" ").filter(Boolean).slice(0, 10);
-  const finalTitle = words.join(" ");
-  if (!finalTitle) return "";
-  return finalTitle.charAt(0).toUpperCase() + finalTitle.slice(1);
+    .replace(/^spune-mi\s+/i, "")
+    .replace(/^explică-mi\s+/i, "")
+    .replace(/^cum pot să\s+/i, "")
+    .replace(/^cum să\s+/i, "")
+    .replace(/^te rog\s+/i, "");
+  clean = cleanTitleInput(clean);
+  if (!clean || clean.length < 3) return "";
+  const words = clean.split(" ").filter(Boolean);
+  let title = words.slice(0, 6).join(" ");
+  title = title.replace(/[,:;.!?]+$/g, "").trim();
+  if (!title) return "";
+  return title.charAt(0).toUpperCase() + title.slice(1);
 }
 
-// Resolves the title to save: keep an existing useful title, otherwise derive a
-// topic title from the first meaningful user message; else use the fallback.
-function resolveChatTitleForSave({ existingTitle, messages, fallback }) {
-  if (existingTitle && !isGenericChatTitle(existingTitle)) {
-    return cleanTextForTitle(existingTitle).slice(0, 90);
+// Extracts a messages array from either an array or a chat row (any field).
+function messagesArrayForTitle(rowOrMessages) {
+  if (Array.isArray(rowOrMessages)) return rowOrMessages;
+  const row = rowOrMessages || {};
+  const sources = [
+    row.messages_json,
+    row.messages,
+    row.chat_messages,
+    row.conversation,
+    row.metadata?.messages,
+  ];
+  for (const source of sources) {
+    try {
+      if (Array.isArray(source)) return source;
+      if (typeof source === "string" && source.trim()) {
+        const parsed = JSON.parse(source);
+        if (Array.isArray(parsed)) return parsed;
+      }
+    } catch (error) {}
   }
-  const derived = deriveTitleFromText(
-    extractFirstMeaningfulUserMessage(messages),
+  return [];
+}
+
+// Returns the best raw text to summarize: the first few user messages, else the
+// stored last-message preview.
+function getConversationTextForTitle(rowOrMessages) {
+  const messages = messagesArrayForTitle(rowOrMessages);
+  const userMessages = messages
+    .filter((msg) => {
+      const role = String(msg.role || msg.sender || "").toLowerCase();
+      const content = msg.content || msg.message || msg.text || "";
+      return role === "user" && String(content).trim().length > 4;
+    })
+    .map((msg) => msg.content || msg.message || msg.text)
+    .slice(0, 4);
+  if (userMessages.length > 0) return userMessages.join(" ");
+  const row = Array.isArray(rowOrMessages) ? {} : rowOrMessages || {};
+  return (
+    row.last_message_preview ||
+    row.lastMessagePreview ||
+    row.last_message ||
+    row.lastMessage ||
+    row.preview ||
+    ""
   );
-  if (derived) return derived.slice(0, 90);
-  return existingTitle || fallback;
+}
+
+// Deterministic (no AI) short title from conversation text.
+function buildDeterministicShortChatTitle(rowOrMessages) {
+  return compactChatTitle(getConversationTextForTitle(rowOrMessages));
+}
+
+// Generates a very short title with AI. Only called on save when no useful
+// title exists. Uses raw fetch (matching the rest of this file) and returns ""
+// on any failure so the deterministic fallback can take over.
+async function generateShortChatTitleWithAI({ apiKey, messages, fallbackText }) {
+  try {
+    if (!apiKey) return "";
+    const compactMessages = Array.isArray(messages)
+      ? messages.slice(-8).map((msg) => ({
+          role: msg.role === "assistant" ? "assistant" : "user",
+          content: String(
+            msg.content || msg.message || msg.text || "",
+          ).slice(0, 800),
+        }))
+      : [];
+
+    const prompt = `
+Generează un titlu foarte scurt pentru această conversație.
+
+Reguli:
+- Limba română
+- 2-6 cuvinte maximum
+- Ideal 2-4 cuvinte
+- Fără propoziție lungă
+- Fără punct la final
+- Fără ghilimele
+- Fără markdown
+- Fără emoji
+- Fără "Chat", "Conversație", "ITER"
+- Titlul trebuie să spună clar subiectul conversației
+
+Exemple bune:
+Plan de afaceri
+Taxe SRL
+Lansare platformă AI
+Simptome digestive
+Mesaj către client
+Strategie marketing
+Pregătire interviu
+Plan alimentar
+
+Returnează doar titlul, nimic altceva.
+`;
+
+    const res = await fetch("https://api.openai.com/v1/chat/completions", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${apiKey}`,
+      },
+      body: JSON.stringify({
+        model: "gpt-4o-mini",
+        temperature: 0.2,
+        max_tokens: 20,
+        messages: [
+          { role: "system", content: prompt },
+          ...compactMessages,
+          {
+            role: "user",
+            content: `Text fallback pentru context: ${String(
+              fallbackText || "",
+            ).slice(0, 1200)}`,
+          },
+        ],
+      }),
+    });
+
+    if (!res.ok) {
+      console.warn("[chat title AI generation failed]", {
+        status: res.status,
+      });
+      return "";
+    }
+
+    const data = await res.json();
+    const rawTitle = data.choices?.[0]?.message?.content || "";
+    const cleanTitle = compactChatTitle(rawTitle);
+    if (
+      cleanTitle &&
+      cleanTitle.split(" ").filter(Boolean).length <= 6 &&
+      !isGenericChatTitle(cleanTitle)
+    ) {
+      return cleanTitle;
+    }
+    return "";
+  } catch (error) {
+    console.warn("[chat title AI generation failed]", {
+      error: error?.message || String(error),
+    });
+    return "";
+  }
+}
+
+// Resolves the title to save: keep an existing useful title; otherwise try AI,
+// then deterministic fallback. Returns a compact (<=6 word) title or "".
+async function resolveShortChatTitleForSave({
+  apiKey,
+  existingTitle,
+  messages,
+}) {
+  let shortChatTitle = existingTitle;
+  if (!shortChatTitle || isGenericChatTitle(shortChatTitle)) {
+    const deterministic = buildDeterministicShortChatTitle(messages);
+    const aiTitle = await generateShortChatTitleWithAI({
+      apiKey,
+      messages,
+      fallbackText:
+        getConversationTextForTitle(messages) || deterministic || "",
+    });
+    shortChatTitle = aiTitle || deterministic || "";
+  }
+  shortChatTitle = compactChatTitle(shortChatTitle);
+  if (!shortChatTitle || isGenericChatTitle(shortChatTitle)) {
+    shortChatTitle = "";
+  }
+  return shortChatTitle;
 }
 
 // Extracts the text content of a chat message regardless of shape (web and
@@ -560,6 +726,7 @@ async function saveChatSessionToSupabase({
   assistantReply,
   idempotencyKey,
   accessType,
+  apiKey,
 }) {
   const baseUrl = process.env.SUPABASE_URL;
   const secretKey = process.env.SUPABASE_SECRET_KEY;
@@ -585,7 +752,8 @@ async function saveChatSessionToSupabase({
       profileId = profileLookup.data[0].id || null;
     }
 
-    // Preserve an existing chat_title if this session already exists.
+    // Preserve an existing useful title if this session already exists. Read
+    // both chat_title and metadata so a previously-saved short title wins.
     let existingTitle = null;
     const existing = await supabaseSelect({
       baseUrl,
@@ -593,15 +761,20 @@ async function saveChatSessionToSupabase({
       table: "chat_sessions",
       query: `wix_item_id=eq.${encodeURIComponent(
         chatSessionId,
-      )}&select=chat_title&limit=1`,
+      )}&select=chat_title,metadata&limit=1`,
     });
     if (
       existing.ok &&
       Array.isArray(existing.data) &&
-      existing.data.length > 0 &&
-      existing.data[0].chat_title
+      existing.data.length > 0
     ) {
-      existingTitle = existing.data[0].chat_title;
+      const existingRow = existing.data[0] || {};
+      const existingMetadata = existingRow.metadata || {};
+      existingTitle =
+        existingRow.chat_title ||
+        existingMetadata.chatTitle ||
+        existingMetadata.title ||
+        null;
     }
 
     const preview =
@@ -609,18 +782,28 @@ async function saveChatSessionToSupabase({
         ? assistantReply.slice(0, 100)
         : "";
 
-    // Derive a topic title once, from the first meaningful user message, unless
-    // a useful (non-generic) title already exists. Never calls AI.
-    const resolvedTitle = resolveChatTitleForSave({
+    // Resolve a very short (2-6 word) title. AI is only invoked when there is
+    // no existing useful title; otherwise the existing one is kept.
+    const shortChatTitle = await resolveShortChatTitleForSave({
+      apiKey,
       existingTitle,
       messages: messagesJson,
-      fallback: `Chat - ${categorySlug || "general"}`,
     });
 
-    console.log("[chat title generated]", {
+    // The chat_title column must not be blank; fall back to a deterministic
+    // short title, then a generic label (dashboard-data re-derives generics).
+    const columnTitle =
+      shortChatTitle ||
+      buildDeterministicShortChatTitle(messagesJson) ||
+      `Chat - ${categorySlug || "general"}`;
+
+    console.log("[chat title compact]", {
       chatSessionId,
       source: "category-chat",
-      title: resolvedTitle,
+      title: shortChatTitle || columnTitle,
+      wordCount: String(shortChatTitle || columnTitle || "")
+        .split(" ")
+        .filter(Boolean).length,
     });
 
     const row = {
@@ -630,7 +813,7 @@ async function saveChatSessionToSupabase({
       chat_type: "category",
       category_slug: categorySlug || null,
       category_name: categoryName || null,
-      chat_title: resolvedTitle,
+      chat_title: columnTitle,
       messages_json: Array.isArray(messagesJson) ? messagesJson : [],
       tools_json: Array.isArray(tools) ? tools : [],
       last_message_preview: preview,
@@ -640,7 +823,7 @@ async function saveChatSessionToSupabase({
         lastIdempotencyKey: idempotencyKey || null,
         accessType: accessType || null,
         updatedFrom: "category_chat",
-        chatTitle: resolvedTitle,
+        chatTitle: shortChatTitle,
       },
       updated_at: new Date().toISOString(),
     };
@@ -1359,6 +1542,7 @@ toolId trebuie să fie identic cu unul din listă.`;
       assistantReply: reply,
       idempotencyKey,
       accessType: accessCheckResult ? accessCheckResult.accessType : null,
+      apiKey,
     });
 
     console.log("[category-chat] saved wix_item_id", chatSessionId);
