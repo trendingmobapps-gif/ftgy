@@ -211,6 +211,44 @@ export default async function handler(req, res) {
 
   const memberId = firstNonEmpty(body.memberId, body.wixMemberId) || null;
 
+  // --- Mobile homepage limited-history mode ---
+  // The mobile homepage sends source: "mobile-homepage" and only needs the
+  // latest few rows. Limits are applied ONLY in that mode; every other request
+  // (web + full mobile history pages) keeps the current full-history behavior.
+  const source = firstNonEmpty(body.source);
+  const isMobileHomepageRequest = source === "mobile-homepage";
+
+  // Parses a client-supplied limit into a safe integer (1..50) or null.
+  const parseSafeLimit = (value, fallback) => {
+    const parsed = Number(value ?? fallback);
+    if (!Number.isFinite(parsed) || parsed <= 0) return null;
+    return Math.min(Math.floor(parsed), 50);
+  };
+
+  // Default full-history limit used for every non-mobile-homepage request. This
+  // preserves the previous hardcoded behavior exactly.
+  const FULL_HISTORY_LIMIT = 1000;
+
+  // In mobile-homepage mode, an invalid/zero client limit falls back to 3 so
+  // the query is never built with a null limit.
+  const finalChatLimit = isMobileHomepageRequest
+    ? parseSafeLimit(body.chatLimit, 3) || 3
+    : FULL_HISTORY_LIMIT;
+  const finalGenerationLimit = isMobileHomepageRequest
+    ? parseSafeLimit(body.generationLimit, 3) || 3
+    : FULL_HISTORY_LIMIT;
+  const finalSavedGenerationLimit = isMobileHomepageRequest
+    ? parseSafeLimit(body.savedGenerationLimit ?? body.generationLimit, 3) || 3
+    : FULL_HISTORY_LIMIT;
+
+  console.log("[dashboard-data] request mode", {
+    source: source || null,
+    isMobileHomepageRequest,
+    finalChatLimit,
+    finalGenerationLimit,
+    finalSavedGenerationLimit,
+  });
+
   // --- Environment (never exposed) ---
   const rawBaseUrl = process.env.SUPABASE_URL;
   const secretKey =
@@ -507,7 +545,7 @@ export default async function handler(req, res) {
       baseUrl,
       secretKey,
       table: "saved_generations",
-      query: `email=eq.${encodedEmail}&order=created_at.desc&limit=1000&select=*`,
+      query: `email=eq.${encodedEmail}&order=created_at.desc&limit=${finalSavedGenerationLimit}&select=*`,
     });
     if (savedLookup.ok && Array.isArray(savedLookup.data)) {
       savedGenerations = savedLookup.data.map((row) => {
@@ -571,7 +609,7 @@ export default async function handler(req, res) {
       baseUrl,
       secretKey,
       table: "generation_history",
-      query: `email=eq.${encodedEmail}&order=created_at.desc&limit=1000&select=*`,
+      query: `email=eq.${encodedEmail}&order=created_at.desc&limit=${finalGenerationLimit}&select=*`,
     });
     if (historyLookup.ok && Array.isArray(historyLookup.data)) {
       generationHistory = historyLookup.data.map((row) => ({
@@ -611,7 +649,7 @@ export default async function handler(req, res) {
       baseUrl,
       secretKey,
       table: "chat_sessions",
-      query: `email=eq.${encodedEmail}&order=updated_at.desc&limit=1000&select=*`,
+      query: `email=eq.${encodedEmail}&order=updated_at.desc&limit=${finalChatLimit}&select=*`,
     });
     if (chatLookup.ok && Array.isArray(chatLookup.data)) {
       chatHistory = chatLookup.data.map((row) => {
@@ -743,6 +781,19 @@ export default async function handler(req, res) {
       avatarUrl: (profile && profile.avatar_url) || "",
       hasAccount: (profile && profile.has_account) || false,
     };
+
+    console.log("[dashboard-data] Response summary:", {
+      email,
+      source: source || null,
+      isMobileHomepageRequest,
+      finalChatLimit,
+      finalGenerationLimit,
+      finalSavedGenerationLimit,
+      userAccessPresent: !!userAccess,
+      savedGenerationsCount: savedGenerations.length,
+      generationHistoryCount: generationHistory.length,
+      chatHistoryCount: chatHistory.length,
+    });
 
     res.status(200).json({
       success: true,
