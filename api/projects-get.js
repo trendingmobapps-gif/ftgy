@@ -4,23 +4,16 @@
 // which case occurred).
 
 import { guardRequest, sendSuccess, sendError } from "../lib/projects/http.js";
-import { resolveRequestUser } from "../lib/resolve-request-user.js";
 import { isValidUuid } from "../lib/projects/validation.js";
 import { getProjectOwned } from "../lib/projects/repository.js";
 import { serializeProject } from "../lib/projects/serializer.js";
 import { PROJECT_ERROR_CODES } from "../lib/projects/constants.js";
 
 export default async function handler(req, res) {
-  const guard = guardRequest(req, res);
+  const guard = await guardRequest(req, res);
   if (!guard.ok) return;
 
-  const { body, baseUrl, secretKey } = guard;
-
-  const user = resolveRequestUser(body);
-  if (!user.ok) {
-    sendError(res, user.status, user.code, user.message);
-    return;
-  }
+  const { body, baseUrl, serviceRoleKey, authenticatedUser } = guard;
 
   const projectId =
     typeof body.projectId === "string" ? body.projectId.trim() : "";
@@ -38,8 +31,8 @@ export default async function handler(req, res) {
   try {
     const result = await getProjectOwned({
       baseUrl,
-      secretKey,
-      userId: user.userId,
+      secretKey: serviceRoleKey,
+      userId: authenticatedUser.id,
       projectId,
     });
 

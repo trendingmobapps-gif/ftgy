@@ -4,24 +4,17 @@
 // OpenAI calls in Phase 1.
 
 import { guardRequest, sendSuccess, sendError } from "../lib/projects/http.js";
-import { resolveRequestUser } from "../lib/resolve-request-user.js";
 import { validateCreateInput } from "../lib/projects/validation.js";
 import { createProject } from "../lib/projects/repository.js";
 import { serializeProject } from "../lib/projects/serializer.js";
 import { PROJECT_ERROR_CODES } from "../lib/projects/constants.js";
 
 export default async function handler(req, res) {
-  const guard = guardRequest(req, res);
+  const guard = await guardRequest(req, res);
   if (!guard.ok) return;
 
-  const { body, baseUrl, secretKey } = guard;
-
-  // Authoritative ownership via memberId (Supabase user UUID).
-  const user = resolveRequestUser(body);
-  if (!user.ok) {
-    sendError(res, user.status, user.code, user.message);
-    return;
-  }
+  // Authoritative ownership is the verified Supabase user (never body input).
+  const { body, baseUrl, serviceRoleKey, authenticatedUser } = guard;
 
   // Validate + normalize input; derive name from goal when omitted.
   const { valid, value, fields } = validateCreateInput(body);
@@ -40,8 +33,8 @@ export default async function handler(req, res) {
     const nowIso = new Date().toISOString();
     const result = await createProject({
       baseUrl,
-      secretKey,
-      userId: user.userId,
+      secretKey: serviceRoleKey,
+      userId: authenticatedUser.id,
       value,
       nowIso,
     });
