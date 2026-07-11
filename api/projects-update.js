@@ -4,7 +4,6 @@
 // columns. Archived projects are read-only.
 
 import { guardRequest, sendSuccess, sendError } from "../lib/projects/http.js";
-import { resolveRequestUser } from "../lib/resolve-request-user.js";
 import {
   isValidUuid,
   validateUpdateInput,
@@ -18,16 +17,10 @@ import { serializeProject } from "../lib/projects/serializer.js";
 import { PROJECT_ERROR_CODES } from "../lib/projects/constants.js";
 
 export default async function handler(req, res) {
-  const guard = guardRequest(req, res);
+  const guard = await guardRequest(req, res);
   if (!guard.ok) return;
 
-  const { body, baseUrl, secretKey } = guard;
-
-  const user = resolveRequestUser(body);
-  if (!user.ok) {
-    sendError(res, user.status, user.code, user.message);
-    return;
-  }
+  const { body, baseUrl, serviceRoleKey, authenticatedUser } = guard;
 
   const projectId =
     typeof body.projectId === "string" ? body.projectId.trim() : "";
@@ -68,8 +61,8 @@ export default async function handler(req, res) {
     // Ownership check first (also detects archived state).
     const existing = await getProjectOwned({
       baseUrl,
-      secretKey,
-      userId: user.userId,
+      secretKey: serviceRoleKey,
+      userId: authenticatedUser.id,
       projectId,
     });
 
@@ -108,8 +101,8 @@ export default async function handler(req, res) {
 
     const result = await updateProjectOwned({
       baseUrl,
-      secretKey,
-      userId: user.userId,
+      secretKey: serviceRoleKey,
+      userId: authenticatedUser.id,
       projectId,
       columns,
     });

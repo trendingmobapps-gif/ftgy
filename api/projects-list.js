@@ -4,47 +4,47 @@
 // projects are excluded by default.
 
 import { guardRequest, sendSuccess, sendError } from "../lib/projects/http.js";
-import { resolveRequestUser } from "../lib/resolve-request-user.js";
-import { isValidCategorySlug } from "../lib/projects/validation.js";
+import { validateListInput } from "../lib/projects/validation.js";
 import { listProjects } from "../lib/projects/repository.js";
 import { serializeProjects } from "../lib/projects/serializer.js";
 import { PROJECT_ERROR_CODES } from "../lib/projects/constants.js";
 
 export default async function handler(req, res) {
-  const guard = guardRequest(req, res);
+  const guard = await guardRequest(req, res);
   if (!guard.ok) return;
 
-  const { body, baseUrl, secretKey } = guard;
+  const { body, baseUrl, serviceRoleKey, authenticatedUser } = guard;
 
-  const user = resolveRequestUser(body);
-  if (!user.ok) {
-    sendError(res, user.status, user.code, user.message);
+  // Strictly validate every supplied query field. Invalid values -> 400
+  // (never silently ignored). Absent fields fall back to repository defaults.
+  const { valid, value, fields } = validateListInput(body);
+  if (!valid) {
+    sendError(
+      res,
+      400,
+      PROJECT_ERROR_CODES.VALIDATION,
+      "Parametrii de listare sunt invalizi.",
+      fields,
+    );
     return;
   }
 
-  // Only pass through a valid category slug; ignore invalid values silently.
-  const categorySlug =
-    typeof body.categorySlug === "string" &&
-    isValidCategorySlug(body.categorySlug)
-      ? body.categorySlug.trim()
-      : null;
-
   const filters = {
-    statuses: Array.isArray(body.statuses) ? body.statuses : [],
-    includeArchived: body.includeArchived === true,
-    search: typeof body.search === "string" ? body.search : "",
-    categorySlug,
-    sort: typeof body.sort === "string" ? body.sort : undefined,
-    direction: body.direction === "asc" ? "asc" : "desc",
-    limit: body.limit,
-    cursor: body.cursor,
+    statuses: value.statuses || [],
+    includeArchived: value.includeArchived === true,
+    search: value.search || "",
+    categorySlug: value.categorySlug || null,
+    sort: value.sort,
+    direction: value.direction || "desc",
+    limit: value.limit,
+    cursor: value.cursor,
   };
 
   try {
     const result = await listProjects({
       baseUrl,
-      secretKey,
-      userId: user.userId,
+      secretKey: serviceRoleKey,
+      userId: authenticatedUser.id,
       filters,
     });
 
