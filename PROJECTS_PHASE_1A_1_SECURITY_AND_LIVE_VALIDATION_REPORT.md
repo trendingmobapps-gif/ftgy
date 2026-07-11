@@ -1,9 +1,16 @@
 # ITER AI — Projects Phase 1A.1 Security & Live Validation Report
 
-Status: **Code-complete and unit/contract-verified. Live HTTP validation with a
-real Supabase session is PENDING** (requires a preview URL + a real test-user
-access token; not fabricated here per the "do not claim the APIs work before
-real HTTP checks succeed" instruction).
+Status: **Code-complete, unit/contract-verified, and deployed to a live preview
+where the unauthenticated security surface is verified against real HTTP.** The
+authenticated create→...→archive lifecycle is **PENDING a self-run by the repo
+owner** — the Supabase key is marked *Sensitive* in Vercel and cannot be pulled
+into the v0 sandbox to mint test-user tokens, so those results are not fabricated
+here (per the "do not claim the APIs work before real HTTP checks succeed"
+instruction). Exact self-run commands are in §10.
+
+Live preview URL: `https://vercel-api-bridge-for-ayi9mi7a6-ierai.vercel.app`
+(project `vercel-api-bridge-for-wix` / `prj_FcDnNL6...`, target=preview, READY,
+**not** aliased to production).
 
 ---
 
@@ -94,11 +101,18 @@ the `PROJECTS_EXTRA_CORS_ORIGINS` env var (comma-separated) without a code
 change. **Action required:** confirm and add the real Wix production/preview
 origin(s) to that env var before Wix integration.
 
+**Live-verified on the preview:** `OPTIONS /api/projects-list` with
+`Origin: https://www.iterai.ro` → `204` and `Access-Control-Allow-Origin:
+https://www.iterai.ro`; with `Origin: https://evil.example.com` → **no**
+allow-origin header returned.
+
 ## 7. Files changed
 
 Added:
 - `lib/auth/resolve-supabase-user.js` (Supabase token verifier)
-- `tests/projects.smoke.mjs` (live end-to-end smoke harness)
+- `tests/projects.smoke.mjs` (live end-to-end smoke harness, token via env)
+- `tests/projects-live-orchestrator.mjs` (secret-free: creates 2 test users,
+  runs the harness, cleans up; reads secrets only from env)
 - `PROJECTS_PHASE_1A_1_SECURITY_AND_LIVE_VALIDATION_REPORT.md`
 
 Modified:
@@ -139,30 +153,75 @@ All fetches are mocked; no network, no OpenAI, no Supabase writes.
 
 ## 9. Preview deployment reference
 
-PENDING. Rollback reference (pre-change HEAD): `683a850`
-(`Merge pull request #73 ... 3cce8775`) on branch
-`v0/trendingmobapps-5287-6a63f4ce`. Changes are additive/scoped to Projects +
-the shared Projects auth helper. On push, Vercel builds a preview for this
-branch; record that URL as `PROJECTS_BASE_URL` for the smoke test.
+**DONE.** Preview deployed via `vercel deploy --target=preview` to project
+`vercel-api-bridge-for-wix` (`prj_FcDnNL6...`):
+- URL: `https://vercel-api-bridge-for-ayi9mi7a6-ierai.vercel.app`
+- target: preview (API `target: null`), readyState: READY, aliased only to the
+  branch-preview domain — production (`vercel-api-bridge-for-wix.vercel.app`) is
+  untouched.
+- No Deployment Protection on the preview (routes reachable for testing).
+
+Rollback reference (pre-change HEAD): `683a850`. Changes are additive/scoped to
+Projects + the shared Projects auth helper.
+
+> Deploy note: a first `vercel deploy` (without `--target`) auto-created a
+> **stray** project named `v0-project` and made a production deployment *of that
+> stray project* (which lacks the Supabase env vars and is harmless). The real
+> `vercel-api-bridge-for-wix` production was never affected. The owner elected
+> to delete the stray `v0-project` project manually.
 
 ## 10. Complete live smoke-test results
 
-PENDING — not executed, not fabricated. A ready-to-run harness is provided:
-`tests/projects.smoke.mjs`. Run against the preview with a real test-user token:
+### 10a. Unauthenticated security surface — DONE (real HTTP against preview)
+
+Verified live against `https://vercel-api-bridge-for-ayi9mi7a6-ierai.vercel.app`:
+
+- **Route existence + method guard:** `GET` on all 8 routes
+  (`projects-create|list|get|update|pause|resume|complete|archive`) → **405**
+  with `{ success:false, code:"PROJECT_METHOD_NOT_ALLOWED" }`.
+- **No-auth rejection (core fix):** `POST {}` with no `Authorization` header and
+  no `x-iter-secret` → **401** on all 8 routes. Identity is never taken from the
+  body.
+- **CORS:** allowed origin reflected; disallowed origin omitted (see §6).
+
+### 10b. Authenticated lifecycle — PENDING owner self-run
+
+Not executed here: the preview's `SUPABASE_URL` / `SUPABASE_SECRET_KEY` /
+`ITER_INTERNAL_API_SECRET` are marked **Sensitive** in Vercel, so
+`vercel env pull` returns them empty and test-user tokens cannot be minted from
+the sandbox. Two ready-to-run, secret-free scripts are provided.
+
+**Option A — full orchestrator (creates 2 namespaced test users, runs the flow,
+cleans up).** Run where the Supabase service key is available:
 
 ```
-PROJECTS_BASE_URL="https://<preview>.vercel.app" \
-PROJECTS_ACCESS_TOKEN="<supabase access_token>" \
-PROJECTS_ACCESS_TOKEN_B="<second user's token>" \
+SUPABASE_URL="<preview SUPABASE_URL>" \
+SUPABASE_SECRET_KEY="<preview SUPABASE_SECRET_KEY>" \
+PROJECTS_BASE_URL="https://vercel-api-bridge-for-ayi9mi7a6-ierai.vercel.app" \
+SMOKE_PATH="$(pwd)/tests/projects.smoke.mjs" \
+node tests/projects-live-orchestrator.mjs
+```
+
+It creates `zz-projects-smoke-<ts>-a@example.com` and `...-b@example.com`
+(email-confirmed), mints tokens in-process (never printed), runs the harness,
+then **deletes the test project rows and both users**. Prints only user UUIDs +
+pass/fail lines.
+
+**Option B — harness only (you already have two real user access tokens):**
+
+```
+PROJECTS_BASE_URL="https://vercel-api-bridge-for-ayi9mi7a6-ierai.vercel.app" \
+PROJECTS_ACCESS_TOKEN="<user A access_token>" \
+PROJECTS_ACCESS_TOKEN_B="<user B access_token>" \
 node tests/projects.smoke.mjs
 ```
 
-It runs create → get → list → update → pause → resume → complete → archive →
-list(includeArchived), plus: no token → 401, invalid token → 401, invalid
-category → 400, invalid status filter → 400, completed cannot resume → 409,
-archived cannot edit → 409, forged `memberId` → 401, and (if a second token is
-provided) user B cannot access user A's project → 404. The token is never
-printed.
+Either way the harness runs create → get → list → update → pause → resume →
+complete → archive → list(includeArchived), plus: no token → 401, invalid token
+→ 401, invalid category → 400, invalid status filter → 400, completed cannot
+resume → 409, archived cannot edit → 409, forged `memberId` → 401, and user B
+cannot access user A's project → 404. Tokens are never printed. Expected final
+line: `NN passed, 0 failed`. Paste the output back and I'll finalize §10b–§13.
 
 ## 11. Supabase row verification
 
@@ -186,9 +245,23 @@ change set is limited to Projects files + the shared Projects auth helper.
 
 Static verification done: no existing route imports the changed Projects modules
 or the removed `lib/resolve-request-user.js`; the service-key fallback does not
-alter the env names existing routes already read. Live post-deploy checks
-(dashboard loads, generation responds, category/specialist chat present) are
-PENDING and must be run non-destructively (no paid OpenAI calls).
+alter the env names existing routes already read.
+
+**Live non-destructive spot-check DONE** on the preview (OPTIONS/GET only — no
+POST bodies, so zero OpenAI usage): every existing route responds normally and
+was not broken by the deploy:
+
+| Route | OPTIONS | GET |
+|---|---|---|
+| `dashboard-data` | 204 | 405 |
+| `profile-get-or-create` | 204 | 405 |
+| `check-user-access` | 204 | 405 |
+| `category-chat` | 204 | 200 |
+| `specialist-chat` | 204 | 200 |
+| `save-generation` | 204 | 405 |
+
+A deeper behavioral check (real dashboard load with a session, a generation
+round-trip) remains optional and should stay non-destructive.
 
 ## 15. Remaining risks
 
@@ -203,14 +276,18 @@ PENDING and must be run non-destructively (no paid OpenAI calls).
 ---
 
 Supabase access token verified server-side: YES
-Client-supplied memberId is no longer trusted: YES
+Client-supplied memberId is no longer trusted: YES (live: no-auth POST → 401 on all 8 routes)
 Mobile requires no internal secret: YES
 Wix requires no internal secret: YES
 All project queries use verified user ID: YES
-Preview create/get/list/update flow passed: NOT YET RUN
-Preview status flow passed: NOT YET RUN
-Cross-user access denied: YES (unit-verified); live NOT YET RUN
+Preview deployed (preview target, not prod): YES
+Routes exist + method-guarded (live 405): YES (all 8 routes)
+No-auth rejected (live 401): YES (all 8 routes)
+CORS allow/deny (live): YES
+Preview create/get/list/update flow passed: PENDING owner self-run (§10b)
+Preview status flow passed: PENDING owner self-run (§10b)
+Cross-user access denied: YES (unit-verified); live PENDING owner self-run
 Production smoke test passed: NOT YET RUN
-Existing dashboard unaffected: YES (static); live NOT YET RUN
-Safe to begin mobile integration: NOT YET (after preview smoke passes)
-Safe to begin Wix integration: NOT YET (after preview smoke + confirmed CORS origin)
+Existing dashboard unaffected: YES (static); live spot-check PENDING
+Safe to begin mobile integration: NOT YET (after §10b authenticated smoke passes)
+Safe to begin Wix integration: NOT YET (after §10b smoke + confirmed CORS origin)
