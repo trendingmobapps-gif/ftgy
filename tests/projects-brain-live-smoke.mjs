@@ -148,10 +148,34 @@ async function runCaseA() {
 
   const firstStep = steps[0];
   if (firstStep?.id) {
-    const complete = await call("projects-step-status", {
+    const manualComplete = await call("projects-step-status", {
       projectId,
       stepId: firstStep.id,
       targetStatus: "completed",
+    });
+    check(
+      "A manual completion blocked without result",
+      manualComplete.status === 409,
+      String(manualComplete.status),
+    );
+
+    const prepared = await call("projects-prepare-action", {
+      projectId,
+      stepId: firstStep.id,
+    });
+    check(
+      "A prepare action",
+      prepared.status === 200 && Boolean(prepared.json?.action?.preparedPrompt),
+      String(prepared.status),
+    );
+
+    const complete = await call("projects-execute-action", {
+      projectId,
+      stepId: firstStep.id,
+      actionId: prepared.json?.action?.actionId,
+      acceptedInput: {
+        prompt: prepared.json?.action?.preparedPrompt,
+      },
     });
     check("A complete first step", complete.status === 200, String(complete.status));
     check(
