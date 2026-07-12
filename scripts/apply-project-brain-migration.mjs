@@ -9,7 +9,8 @@ import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
-const MIGRATION_PATH = join(__dirname, "../supabase/migrations/20260712_project_brain_workflow.sql");
+const BRAIN_MIGRATION_PATH = join(__dirname, "../supabase/migrations/20260712_project_brain_workflow.sql");
+const ACTIONS_MIGRATION_PATH = join(__dirname, "../supabase/migrations/20260713_project_action_results.sql");
 const PROJECT_REF = (process.env.SUPABASE_PROJECT_REF || "cvxhuetjondnmjuobcbx").trim();
 const DB_URL = (process.env.SUPABASE_DB_URL || process.env.DATABASE_URL || "").trim();
 const ACCESS_TOKEN = (process.env.SUPABASE_ACCESS_TOKEN || "").trim();
@@ -54,7 +55,13 @@ async function verifySchema() {
   };
 
   const checks = [];
-  for (const table of ["project_workflows", "project_milestones", "project_steps"]) {
+  for (const table of [
+    "project_workflows",
+    "project_milestones",
+    "project_steps",
+    "project_step_actions",
+    "project_action_results",
+  ]) {
     const resp = await fetch(`${SUPABASE_URL}/rest/v1/${table}?select=id&limit=0`, { headers });
     checks.push({ table, status: resp.status, ok: resp.status === 200 });
   }
