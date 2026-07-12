@@ -2,5 +2,5 @@
   "$schema": "https://openapi.vercel.sh/vercel.json",
   "framework": null,
   "buildCommand": "echo \"No build step required for serverless API\"",
-  "installCommand": "echo \"No dependencies to install\""
+  "installCommand": "npm install"
 }

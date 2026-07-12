@@ -7,7 +7,8 @@
   "scripts": {
     "build": "echo \"No build step required for serverless API\"",
     "test:workflows": "node --test scripts/workflow-next-action.test.js scripts/generate-tool-contract.test.js scripts/generation-policy.test.js scripts/backend-contract.test.js",
-    "test:projects-intent": "node --test tests/projects-intent-analysis.test.mjs tests/projects-icon-assignment.test.mjs tests/projects-safety.test.mjs tests/projects-brain.test.mjs",
+    "test:projects-intent": "node --test tests/projects-intent-analysis.test.mjs tests/projects-icon-assignment.test.mjs tests/projects-safety.test.mjs tests/projects-brain.test.mjs tests/projects-brain-catalog-parity.test.mjs",
+    "smoke:projects-brain": "node tests/projects-brain-live-runner.mjs",
     "smoke:projects-intent": "node tests/projects-intent-live-smoke.mjs",
     "audit:tool-generation": "node scripts/audit-tool-generation.js",
     "verify:workflow-registry": "node scripts/verify-workflow-registry.js"
@@ -15,6 +16,7 @@
   "dependencies": {
     "formidable": "^3.5.4",
     "mammoth": "^1.12.0",
-    "pdf-parse": "^1.1.1"
+    "pdf-parse": "^1.1.1",
+    "postgres": "^3.4.7"
   }
 }
