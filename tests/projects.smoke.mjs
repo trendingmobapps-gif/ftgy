@@ -75,35 +75,6 @@ async function main() {
     },
   });
 
-  // Diagnostic: if the FIRST authenticated call is rejected, surface the safe
-  // debug blob (present only when PROJECTS_AUTH_DEBUG=1 on the server). The most
-  // common cause is a project mismatch: the token's issRef must equal the
-  // server's serverProjectRef, otherwise GoTrue returns bad_jwt (401).
-  if (created.status === 401 && created.json?.debug) {
-    const d = created.json.debug;
-    console.log("\n--- AUTH DEBUG (create returned 401) ---");
-    console.log(`  server project ref : ${d.serverProjectRef}`);
-    console.log(`  token issuer ref   : ${d.tokenClaims?.issRef}`);
-    console.log(`  token role         : ${d.tokenClaims?.role}`);
-    console.log(`  token expires (s)  : ${d.tokenClaims?.expiresInSec}`);
-    console.log(`  server apiKeyFormat: ${d.apiKeyFormat}`);
-    console.log(`  gotrue status      : ${d.gotrueStatus}`);
-    console.log(`  gotrue body        : ${d.gotrueBody}`);
-    if (
-      d.serverProjectRef &&
-      d.tokenClaims?.issRef &&
-      d.serverProjectRef !== d.tokenClaims.issRef
-    ) {
-      console.log(
-        `  >> PROJECT MISMATCH: token minted for '${d.tokenClaims.issRef}' but server verifies against '${d.serverProjectRef}'.`,
-      );
-      console.log(
-        "  >> Fix: mint the token using the SAME SUPABASE_URL/SUPABASE_SECRET_KEY the deployment uses.",
-      );
-    }
-    console.log("--- end auth debug ---\n");
-  }
-
   check(
     "create -> 201 + project.id",
     created.status === 201 && created.json?.project?.id,
