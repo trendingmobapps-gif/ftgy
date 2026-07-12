@@ -180,7 +180,7 @@ describe("project brain progress and next action", () => {
       },
     ];
 
-    const next = resolveNextAction({ milestones, steps });
+    const next = resolveNextAction({ project: { goal: "Test" }, milestones, steps });
     assert.equal(next.stepId, "s2");
     assert.equal(next.title, "Active step");
   });

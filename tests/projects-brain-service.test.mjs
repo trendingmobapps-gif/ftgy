@@ -182,11 +182,13 @@ describe("project brain step mutation contract", () => {
   it("changes next action after completing first step", () => {
     const bundle = buildBundle({ stepStatuses: ["pending", "pending"] });
     const before = resolveNextAction({
+      project: { goal: "Test", name: "Test" },
       milestones: bundle.milestones,
       steps: bundle.steps,
     });
     bundle.steps[0].status = "completed";
     const after = resolveNextAction({
+      project: { goal: "Test", name: "Test" },
       milestones: bundle.milestones,
       steps: bundle.steps,
     });
@@ -198,6 +200,7 @@ describe("project brain step mutation contract", () => {
     const bundle = buildBundle({ stepStatuses: ["completed", "pending"] });
     const progress = calculateWorkflowProgress(bundle.steps, bundle.milestones);
     const nextAction = resolveNextAction({
+      project: { goal: "Test", name: "Test" },
       milestones: bundle.milestones,
       steps: bundle.steps,
     });

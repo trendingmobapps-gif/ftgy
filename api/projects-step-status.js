@@ -109,6 +109,15 @@ export default async function handler(req, res) {
         );
         return;
       }
+      if (result.code === "RESULT_REQUIRED") {
+        sendError(
+          res,
+          409,
+          "PROJECT_ACTION_RESULT_REQUIRED",
+          "Pasul se finalizează doar după generarea rezultatului.",
+        );
+        return;
+      }
       sendError(res, 500, PROJECT_BRAIN_ERROR_CODES.INTERNAL, "A apărut o eroare internă.");
       return;
     }
