@@ -19,30 +19,6 @@ if (!SUPABASE_URL || !SERVICE_KEY || !BASE_URL || !SMOKE_PATH) {
   process.exit(2);
 }
 
-// Non-secret helper: project ref from a Supabase URL host (abcd.supabase.co).
-function refFromUrl(url) {
-  try {
-    return new URL(url).host.split(".")[0] || "";
-  } catch {
-    return "";
-  }
-}
-
-// Non-secret helper: project ref from an access token's unverified `iss` claim.
-// Used ONLY to compare projects; never authenticates and never prints the token.
-function refFromToken(token) {
-  try {
-    const p = JSON.parse(Buffer.from(token.split(".")[1], "base64").toString("utf8"));
-    return typeof p.iss === "string" ? refFromUrl(p.iss) : "";
-  } catch {
-    return "";
-  }
-}
-
-// The project the minting URL points to. The deployment must verify against the
-// SAME project or every token will be rejected as bad_jwt (401).
-console.log(`Mint (SUPABASE_URL) project ref: ${refFromUrl(SUPABASE_URL) || "(unknown)"}`);
-
 const adminHeaders = {
   "Content-Type": "application/json",
   apikey: SERVICE_KEY,
@@ -142,7 +118,6 @@ async function main() {
     console.log("Minting access tokens (not printed)...");
     const tokenA = await login(users[0]);
     const tokenB = await login(users[1]);
-    console.log(`  token A minted for project ref: ${refFromToken(tokenA) || "(unknown)"}`);
 
     console.log("Running smoke harness against preview...\n");
     smokeCode = await runSmoke(tokenA, tokenB);
