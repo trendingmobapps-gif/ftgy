@@ -164,29 +164,41 @@ async function runCaseA() {
       stepId: firstStep.id,
     });
     check(
-      "A prepare action",
-      prepared.status === 200 && Boolean(prepared.json?.action?.preparedPrompt),
+      "A prepare session",
+      prepared.status === 200 && Boolean(prepared.json?.session?.messages?.length),
       String(prepared.status),
     );
 
-    const complete = await call("projects-execute-action", {
+    const generated = await call("projects-execute-action", {
       projectId,
       stepId: firstStep.id,
       actionId: prepared.json?.action?.actionId,
-      acceptedInput: {
-        prompt: prepared.json?.action?.preparedPrompt,
-      },
+      acceptedInput: {},
     });
-    check("A complete first step", complete.status === 200, String(complete.status));
+    check("A generate session result", generated.status === 200, String(generated.status));
     check(
-      "A progress increased",
-      (complete.json?.progress?.progressPercent || 0) > 0,
-      String(complete.json?.progress?.progressPercent),
+      "A result requires review",
+      generated.json?.requiresReview === true && generated.json?.session?.phase === "review",
+      String(generated.json?.session?.phase),
+    );
+
+    const accepted = await call("projects-session-review", {
+      projectId,
+      stepId: firstStep.id,
+      actionId: prepared.json?.action?.actionId,
+      resultId: generated.json?.result?.id,
+      decision: "accept",
+    });
+    check("A accept session result", accepted.status === 200, String(accepted.status));
+    check(
+      "A progress increased after accept",
+      (accepted.json?.progress?.progressPercent || 0) > 0,
+      String(accepted.json?.progress?.progressPercent),
     );
     check(
-      "A next action changed",
-      complete.json?.nextAction?.stepId !== view?.nextAction?.stepId,
-      `${view?.nextAction?.stepId} -> ${complete.json?.nextAction?.stepId}`,
+      "A next action changed after accept",
+      accepted.json?.nextAction?.stepId !== view?.nextAction?.stepId,
+      `${view?.nextAction?.stepId} -> ${accepted.json?.nextAction?.stepId}`,
     );
 
     const reopen = await call("projects-step-status", {
@@ -197,8 +209,8 @@ async function runCaseA() {
     check("A reopen step", reopen.status === 200, String(reopen.status));
     check(
       "A progress decreased",
-      (reopen.json?.progress?.progressPercent || 0) < (complete.json?.progress?.progressPercent || 0),
-      `${complete.json?.progress?.progressPercent} -> ${reopen.json?.progress?.progressPercent}`,
+      (reopen.json?.progress?.progressPercent || 0) < (accepted.json?.progress?.progressPercent || 0),
+      `${accepted.json?.progress?.progressPercent} -> ${reopen.json?.progress?.progressPercent}`,
     );
   }
 }

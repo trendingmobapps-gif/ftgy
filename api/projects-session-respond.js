@@ -1,11 +1,10 @@
 import { guardRequest, sendSuccess, sendError } from "../lib/projects/http.js";
-import { isValidUuid } from "../lib/projects/validation.js";
 import { getProjectOwned } from "../lib/projects/repository.js";
 import { PROJECT_ERROR_CODES } from "../lib/projects/constants.js";
-import { prepareProjectAction } from "../lib/projects/brain/actions/service.js";
+import { respondToProjectSession } from "../lib/projects/brain/actions/service.js";
 import {
   mapActionServiceError,
-  validatePrepareActionRequest,
+  validateSessionRespondRequest,
 } from "../lib/projects/brain/actions/validation.js";
 
 export default async function handler(req, res) {
@@ -15,8 +14,10 @@ export default async function handler(req, res) {
   const { body, baseUrl, secretKey, authenticatedUser } = guard;
   const projectId = typeof body.projectId === "string" ? body.projectId.trim() : "";
   const stepId = typeof body.stepId === "string" ? body.stepId.trim() : "";
+  const actionId = typeof body.actionId === "string" ? body.actionId.trim() : "";
+  const message = typeof body.message === "string" ? body.message.trim() : "";
 
-  const validation = validatePrepareActionRequest({ projectId, stepId });
+  const validation = validateSessionRespondRequest({ projectId, stepId, actionId, message });
   if (!validation.ok) {
     sendError(res, 400, "PROJECT_ACTION_VALIDATION_ERROR", "Datele cererii sunt invalide.", validation.fields);
     return;
@@ -40,13 +41,15 @@ export default async function handler(req, res) {
       return;
     }
 
-    const result = await prepareProjectAction({
+    const result = await respondToProjectSession({
       baseUrl,
       secretKey,
       userId: authenticatedUser.id,
       project: owned.project,
       projectId,
       stepId,
+      actionId,
+      message,
     });
 
     if (!result.ok) {

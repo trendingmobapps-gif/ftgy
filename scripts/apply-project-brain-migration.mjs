@@ -11,6 +11,7 @@ import { fileURLToPath } from "node:url";
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const BRAIN_MIGRATION_PATH = join(__dirname, "../supabase/migrations/20260712_project_brain_workflow.sql");
 const ACTIONS_MIGRATION_PATH = join(__dirname, "../supabase/migrations/20260713_project_action_results.sql");
+const SESSIONS_MIGRATION_PATH = join(__dirname, "../supabase/migrations/20260714_project_ai_sessions.sql");
 const PROJECT_REF = (process.env.SUPABASE_PROJECT_REF || "cvxhuetjondnmjuobcbx").trim();
 const DB_URL = (process.env.SUPABASE_DB_URL || process.env.DATABASE_URL || "").trim();
 const ACCESS_TOKEN = (process.env.SUPABASE_ACCESS_TOKEN || "").trim();
@@ -72,13 +73,23 @@ async function verifySchema() {
   );
   checks.push({ table: "projects.brain_status", status: brainResp.status, ok: brainResp.status === 200 });
 
+  const sessionResp = await fetch(
+    `${SUPABASE_URL}/rest/v1/project_step_actions?select=session_status&limit=0`,
+    { headers },
+  );
+  checks.push({ table: "project_step_actions.session_status", status: sessionResp.status, ok: sessionResp.status === 200 });
+
   const ok = checks.every((c) => c.ok);
   return { ok, checks };
 }
 
 async function main() {
-  const sql = readFileSync(MIGRATION_PATH, "utf8");
-  console.log(`Applying migration from ${MIGRATION_PATH}`);
+  const sql = [
+    readFileSync(BRAIN_MIGRATION_PATH, "utf8"),
+    readFileSync(ACTIONS_MIGRATION_PATH, "utf8"),
+    readFileSync(SESSIONS_MIGRATION_PATH, "utf8"),
+  ].join("\n");
+  console.log(`Applying migrations:\n- ${BRAIN_MIGRATION_PATH}\n- ${ACTIONS_MIGRATION_PATH}\n- ${SESSIONS_MIGRATION_PATH}`);
   console.log(`Target Supabase ref: ${PROJECT_REF}`);
 
   let result;

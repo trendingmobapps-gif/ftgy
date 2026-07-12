@@ -64,7 +64,9 @@ export default async function handler(req, res) {
     sendSuccess(res, 200, {
       action: result.action,
       result: result.result,
-      ...result.view,
+      session: result.session,
+      requiresReview: Boolean(result.requiresReview),
+      ...(result.view || {}),
     });
   } catch {
     sendError(res, 500, "PROJECT_ACTION_INTERNAL_ERROR", "A apărut o eroare internă.");
