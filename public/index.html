@@ -1,0 +1,67 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>iter-openai-bridge</title>
+    <style>
+      body {
+        font-family: ui-sans-serif, system-ui, -apple-system, sans-serif;
+        background: #0a0a0a;
+        color: #ededed;
+        display: flex;
+        min-height: 100vh;
+        margin: 0;
+        align-items: center;
+        justify-content: center;
+        padding: 1.5rem;
+      }
+      .card {
+        max-width: 520px;
+        width: 100%;
+        background: #161616;
+        border: 1px solid #2a2a2a;
+        border-radius: 12px;
+        padding: 2rem;
+      }
+      h1 {
+        font-size: 1.25rem;
+        margin: 0 0 0.5rem;
+      }
+      p {
+        line-height: 1.6;
+        color: #a1a1a1;
+        margin: 0.5rem 0;
+      }
+      code {
+        background: #2a2a2a;
+        color: #ededed;
+        padding: 0.15rem 0.4rem;
+        border-radius: 6px;
+        font-family: ui-monospace, monospace;
+        font-size: 0.875rem;
+      }
+      .badge {
+        display: inline-block;
+        background: #16a34a;
+        color: #fff;
+        font-size: 0.75rem;
+        padding: 0.2rem 0.6rem;
+        border-radius: 999px;
+        margin-bottom: 1rem;
+      }
+    </style>
+  </head>
+  <body>
+    <main class="card">
+      <span class="badge">Live</span>
+      <h1>iter-openai-bridge</h1>
+      <p>This is a serverless API bridge. There is no frontend here.</p>
+      <p>
+        Send a <strong>POST</strong> request to
+        <code>/api/classify-category</code> with a JSON body:
+      </p>
+      <p><code>{ "query": "user text" }</code></p>
+    </main>
+  </body>
+</html>
