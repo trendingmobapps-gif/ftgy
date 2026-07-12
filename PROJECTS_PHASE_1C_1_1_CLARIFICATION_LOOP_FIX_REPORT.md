@@ -1,52 +1,26 @@
 # ITER AI — Projects Phase 1C.1.1 Clarification Loop Fix Report
 
-**Status:** Code complete, unit tests passed. Preview redeploy + authenticated live smoke pending owner run.  
-Backend repository: `vercel-api-bridge-for-wix`  
+**Status: COMPLETE** — committed-source Preview validated live (7 passed / 0 failed).  
+Backend repository: `vercel-api-bridge-for-wix` (local: `/Users/grigorestefanica/Downloads/ftgy-main`)  
 Date: 2026-07-12
 
 ---
 
 ## Root cause
 
-The intent-analysis prompt treated **plan personalization** (audience, niche, timeframe, implementation details) as blocking requirements for `needs_clarification`. Clear goals such as launching an AI platform were incorrectly sent through multiple clarification rounds.
+The intent-analysis prompt treated **plan personalization** (audience, niche, timeframe, implementation details) as blocking requirements for `needs_clarification`. Clear goals such as launching an AI platform entered repeated clarification rounds.
 
-There was **no server-side guard** preventing `needs_clarification` after `clarificationAnswers` were submitted. Mobile UI also allowed repeated clarification screens (`Trimite din nou`) alongside the main create CTA.
+There was **no server-side guard** preventing `needs_clarification` after `clarificationAnswers` were submitted. Mobile UI also showed competing CTAs (`Trimite din nou` + `Creează proiect`).
 
 ---
 
 ## Backend decision-rule changes
 
 - Separated **category assignment** (may block) from **plan personalization** (must not block).
-- `needs_clarification` allowed only for genuinely vague goals, real multi-category ambiguity, or missing action object.
-- Clear examples in prompt: platform AI launch → `ready + business`; weight loss → `ready + fitness` without timeframe.
-- Maximum **2** clarification questions (was 3).
-- Deterministic post-processing:
-  - `clarificationAnswers` absent → `ready | needs_clarification | unsupported`
-  - `clarificationAnswers` present → `ready | unsupported` only
-- If model returns `needs_clarification` after answers: one constrained repair call, then `unsupported` — never another question round.
-
----
-
-## Files modified (backend)
-
-- `lib/projects/intent-schema.js` — prompt rewrite
-- `lib/projects/intent-analysis.js` — round guard, repair flow, exports
-- `lib/projects/intent-validation.js` — `maxQuestions: 2`
-- `tests/projects-intent-analysis.test.mjs` — 5 new guard tests
-
-**Not modified:** endpoint contract shape, auth, CRUD routes, category slugs, Supabase schema.
-
----
-
-## Unit-test results
-
-```bash
-npm run test:projects-intent
-```
-
-**25/25 pass** (was 20/20)
-
-New coverage: platform AI → ready+business, second-round block, repair to ready, repair to unsupported, max 2 questions.
+- `needs_clarification` only for genuinely vague goals, real multi-category ambiguity, or missing action object.
+- Maximum **2** clarification questions; maximum **1** clarification round.
+- After `clarificationAnswers`: only `ready` or `unsupported` (deterministic guard + repair).
+- If model still returns `needs_clarification` after answers → repair call → else `unsupported`.
 
 ---
 
@@ -54,56 +28,99 @@ New coverage: platform AI → ready+business, second-round block, repair to read
 
 | Field | Value |
 |-------|-------|
-| Branch | `feature/projects-phase-1c-1-intent-analysis` (continued) |
-| Commit | pending push after this report commit |
+| Branch | `feature/projects-phase-1c-1-intent-analysis` |
+| API fix commit | `918d078` |
+| Smoke harness commit | `c24f91e` |
+| HEAD | `c24f91e` (pushed to `origin`, synced) |
+| Unit tests | **25/25 pass** |
+
+Tracked 1C.1.1 files: `lib/projects/intent-analysis.js`, `intent-schema.js`, `intent-validation.js`, `tests/projects-intent-analysis.test.mjs`, `tests/projects-intent-live-smoke.mjs`, report.
+
+No `.env`, secrets, or unrelated untracked files committed.
 
 ---
 
-## Preview / live validation
+## Preview deployment (GitHub → Vercel, Ready)
+
+| Field | Value |
+|-------|-------|
+| Project | `vercel-api-bridge-for-wix` |
+| Environment | **Preview** |
+| Status | **Ready** (GitHub deployment success) |
+| API fix deployment | `DybPZKZdN5Uhk6NjRTBWtQYNxJ54` @ `918d078` |
+| Preview URL (validated) | `https://vercel-api-bridge-for-owa5gc1s0-ierai.vercel.app` |
+| Latest HEAD deployment | `https://vercel-api-bridge-for-3v9t5xrlx-ierai.vercel.app` @ `c24f91e` (smoke harness only) |
+| Production | **Untouched** (`GET` → **404**) |
+
+---
+
+## Basic live route checks (owa5gc1s0)
+
+| Check | Result |
+|-------|--------|
+| `GET /api/projects-analyze-intent` | **405** JSON (`PROJECT_METHOD_NOT_ALLOWED`) |
+| `POST` without `Authorization` | **401** JSON (`PROJECT_UNAUTHENTICATED`) |
+| HTML / “Deployment is building” | **Not observed** |
+
+---
+
+## Authenticated live smoke (A–D)
+
+Harness: `tests/projects-intent-live-smoke.mjs` @ commit `c24f91e`  
+Preview: `https://vercel-api-bridge-for-owa5gc1s0-ierai.vercel.app`  
+Method: ephemeral namespaced Supabase signup user (`zz-intent-smoke-*`), token minted in-process, not logged.
+
+**Result: 7 passed, 0 failed. Exit code: 0.**
+
+| Case | Goal / action | Result |
+|------|---------------|--------|
+| Auth | missing token | **401** PASS |
+| Validation | empty goal | **400** PASS |
+| **A** | Lansare platformă AI România | **ready + business**, no clarification PASS |
+| **B** | Slăbesc 7 kg | **ready + fitness**, no blocking clarification PASS |
+| **C** | Vreau să mă dezvolt | **needs_clarification**, 1–2 questions PASS |
+| **D** | Resubmit C answers | **ready** (not `needs_clarification`) PASS |
+| Safety | no Project rows created | PASS |
+
+Cleanup: ephemeral signup user left in auth (no Project rows created by analyze endpoint). No tokens/passwords logged.
+
+---
+
+## Mobile simulator validation
 
 | Item | Status |
 |------|--------|
-| Prior validated Preview (1C.1) | `https://vercel-api-bridge-for-50xi2kb7m-ierai.vercel.app` |
-| 1C.1.1 Preview redeploy | **Pending** — Vercel CLI unavailable in agent environment |
-| Authenticated live smoke A–D | **Pending owner run** after Preview redeploy |
-
-Expected live results after redeploy:
-
-| Case | Goal | Expected |
-|------|------|----------|
-| A | Lansare platformă AI România | `ready`, `business`, no questions |
-| B | Slăbesc 7 kg | `ready`, `fitness`, no blocking clarification |
-| C | Vreau să mă dezvolt | `needs_clarification`, ≤2 questions |
-| D | Answers for C | `ready` or `unsupported`, never `needs_clarification` |
-
----
-
-## Production status
-
-**Untouched.** No production deployment.
+| Mobile commit | `4da2ec8` on `feature/mobile-homepage-tool-recommendation` |
+| Mobile tests | **28/28 pass** |
+| `EXPO_PUBLIC_PROJECT_INTENT_ANALYSIS_ENABLED` | `true` (local `.env`) |
+| `EXPO_PUBLIC_PROJECTS_API_BASE_URL` | **Owner must set** to `https://vercel-api-bridge-for-owa5gc1s0-ierai.vercel.app` and run `npx expo start --clear` |
+| iOS simulator Tests 1–3 | **Pending owner run** (not executable in agent environment) |
 
 ---
 
 ## Remaining risks
 
-1. Prompt-only behavior for edge-case goals — monitor after redeploy.
-2. Preview redeploy + live smoke must be run before mobile QA on corrected Preview.
+1. iOS simulator UX validation pending owner confirmation on corrected Preview URL.
+2. AI edge-case variability — monitor after real user traffic.
+3. In-memory rate limit remains per-instance.
 
 ---
 
 Clear goals no longer blocked by plan-personalization questions: YES  
-Platform AI launch goal returns ready + business: YES (unit + prompt; live pending)  
-Weight-loss goal returns ready + fitness: YES (unit + prompt; live pending)  
-Clarification limited to one round: YES  
-Maximum two clarification questions enforced: YES  
-Second needs_clarification response prevented server-side: YES  
-Second needs_clarification response guarded mobile-side: YES  
-Only one clarification CTA shown: YES (mobile)  
-Clarification CTA labeled “Continuă”: YES (mobile)  
-Ready after clarification creates Project automatically: YES (mobile flow unchanged)  
-No infinite clarification loop possible: YES  
+Platform AI launch goal returns ready + business live: YES  
+Weight-loss goal returns ready + fitness live: YES  
+Clarification limited to one round live: YES  
+Maximum two clarification questions enforced live: YES  
+Second needs_clarification response prevented server-side live: YES  
+Second needs_clarification response guarded mobile-side live: YES (code); simulator pending  
+Only one clarification CTA shown live: YES (code); simulator pending  
+Clarification CTA labeled “Continuă” live: YES (code); simulator pending  
+Ready after clarification creates Project automatically live: YES (code); simulator pending  
+No infinite clarification loop possible live: YES  
 Backend tests passed: YES  
 Mobile tests passed: YES  
-Committed-source Preview validation passed: NO (pending redeploy + smoke)  
+Committed-source Preview validation passed: YES  
+Mobile simulator validation passed: NO (pending owner)  
 Production untouched: YES  
-Safe to continue to Project workflow backend: YES (after Preview smoke)
+Phase 1C.1.1 complete: YES  
+Safe to begin Phase 1C.2: YES (after owner simulator spot-check)
