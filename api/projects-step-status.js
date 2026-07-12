@@ -8,6 +8,15 @@ import {
 } from "../lib/projects/brain/constants.js";
 import { mutateProjectStepStatus } from "../lib/projects/brain/service.js";
 
+function isPreviewEnvironment() {
+  return process.env.VERCEL_ENV === "preview" || process.env.NODE_ENV !== "production";
+}
+
+function logPreviewValidation(message, details) {
+  if (!isPreviewEnvironment()) return;
+  console.info("[projects-step-status]", message, details);
+}
+
 export default async function handler(req, res) {
   const guard = await guardRequest(req, res, { authMode: "user" });
   if (!guard.ok) return;
@@ -26,6 +35,12 @@ export default async function handler(req, res) {
   }
 
   if (Object.keys(fields).length > 0) {
+    logPreviewValidation("request_validation_failed", {
+      projectIdValid: isValidUuid(projectId),
+      stepIdValid: isValidUuid(stepId),
+      targetStatus,
+      allowedStatuses: PROJECT_STEP_STATUSES,
+    });
     sendError(
       res,
       400,
@@ -78,11 +93,19 @@ export default async function handler(req, res) {
         return;
       }
       if (result.code === "VALIDATION") {
+        logPreviewValidation("step_transition_rejected", {
+          projectId,
+          stepId,
+          targetStatus,
+          reason: result.reason || "unknown",
+          details: result.details || null,
+        });
         sendError(
           res,
           400,
           PROJECT_BRAIN_ERROR_CODES.VALIDATION,
           "Tranziția de status nu este permisă.",
+          result.details || undefined,
         );
         return;
       }
@@ -91,6 +114,9 @@ export default async function handler(req, res) {
     }
 
     sendSuccess(res, 200, {
+      step: result.step,
+      progress: result.progress,
+      nextAction: result.nextAction,
       updatedStepId: result.updatedStepId,
       ...result.view,
     });
