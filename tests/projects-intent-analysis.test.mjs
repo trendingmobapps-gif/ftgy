@@ -47,6 +47,36 @@ function createMockRes() {
   return res;
 }
 
+function buildAllowedSafetyOpenAiResponse() {
+  return {
+    ok: true,
+    async json() {
+      return {
+        choices: [
+          {
+            message: {
+              content: JSON.stringify({
+                status: "allowed",
+                reasonCode: null,
+                userMessage: null,
+              }),
+            },
+          },
+        ],
+      };
+    },
+  };
+}
+
+function getOpenAiSchemaName(options = {}) {
+  try {
+    const body = JSON.parse(options.body || "{}");
+    return body?.response_format?.json_schema?.name || "";
+  } catch {
+    return "";
+  }
+}
+
 describe("intent validation", () => {
   it("rejects missing goal", () => {
     const result = validateIntentAnalysisInput({});
@@ -248,7 +278,7 @@ describe("intent endpoint handler", () => {
       body,
     };
     const res = createMockRes();
-    const fetchFn = async (url) => {
+    const fetchFn = async (url, options = {}) => {
       if (url.includes("/auth/v1/user")) {
         return {
           ok: true,
@@ -258,6 +288,9 @@ describe("intent endpoint handler", () => {
         };
       }
       if (url.includes("openai.com")) {
+        if (getOpenAiSchemaName(options) === "project_safety_decision") {
+          return buildAllowedSafetyOpenAiResponse();
+        }
         return {
           ok: true,
           async json() {
@@ -366,9 +399,12 @@ describe("clarification round guard", () => {
 
   it("repairs second-round clarification to ready when model complies", async () => {
     let callCount = 0;
-    const fetchFn = async (url) => {
+    const fetchFn = async (url, options = {}) => {
       if (!url.includes("openai.com")) {
         throw new Error("unexpected");
+      }
+      if (getOpenAiSchemaName(options) === "project_safety_decision") {
+        return buildAllowedSafetyOpenAiResponse();
       }
       callCount += 1;
       const status = callCount === 1 ? "needs_clarification" : "ready";

@@ -7,6 +7,12 @@ import {
 import { getProjectOwned, updateProjectOwned } from "../lib/projects/repository.js";
 import { serializeProject } from "../lib/projects/serializer.js";
 import { PROJECT_ERROR_CODES } from "../lib/projects/constants.js";
+import {
+  evaluateProjectSafety,
+  logProjectSafetyDecision,
+  PROJECT_SAFETY_BLOCKED_HTTP_STATUS,
+  toBlockedApiPayload,
+} from "../lib/projects/project-safety.js";
 
 export default async function handler(req, res) {
   const guard = await guardRequest(req, res, { authMode: "user" });
@@ -54,6 +60,34 @@ export default async function handler(req, res) {
     if (existing.project.status === "archived") {
       sendError(res, 409, PROJECT_ERROR_CODES.ARCHIVED_READONLY, "Proiectele arhivate nu pot fi editate.");
       return;
+    }
+
+    if (typeof value.goal === "string") {
+      const safetyDecision = await evaluateProjectSafety({
+        goal: value.goal,
+        name: typeof value.name === "string" ? value.name : existing.project.name,
+        description:
+          typeof value.description === "string"
+            ? value.description
+            : existing.project.description,
+      });
+      logProjectSafetyDecision({
+        endpoint: "projects-update",
+        decision: safetyDecision,
+        correlationId: req.headers["x-request-id"],
+      });
+
+      if (safetyDecision.status === "blocked") {
+        const blocked = toBlockedApiPayload(safetyDecision);
+        sendError(
+          res,
+          PROJECT_SAFETY_BLOCKED_HTTP_STATUS,
+          PROJECT_ERROR_CODES.SAFETY_BLOCKED,
+          blocked.message,
+          { reasonCode: blocked.reasonCode },
+        );
+        return;
+      }
     }
 
     const columns = mapUpdateValueToColumns(value);
