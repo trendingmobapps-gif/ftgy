@@ -4,7 +4,7 @@
 **Backend repo:** `/Users/grigorestefanica/Downloads/ftgy-main`  
 **Mobile repo:** `/Users/grigorestefanica/Documents/ITER Mobile/iter-ai-mobile`  
 **Branch:** `feature/projects-phase-1c-2-project-brain` (backend)  
-**Scope:** Architectural refinement of Phase 1C.3 — **not** a new feature surface.
+**HEAD:** `e7595d0`
 
 ---
 
@@ -184,15 +184,11 @@ Open Project → Continue Project → Session opens
 → Generate → Review → Accept → Saved → Step completed
 ```
 
-**Status:** Pending deploy of this commit to Preview + sessions migration on Supabase `cvxhuetjondnmjuobcbx`.
-
-After deploy, run:
+**Status:** Deploy pushed (`e7595d0`); live smoke not run in this session (missing `PROJECTS_BASE_URL` / `PROJECTS_ACCESS_TOKEN` in shell). Run after Preview build:
 
 ```bash
 npm run smoke:projects-brain
 ```
-
-Case A now validates: prepare session → generate → accept → progress increase.
 
 **Production:** untouched.
 
@@ -209,6 +205,6 @@ Minimal information collection implemented: YES
 Action Results preserved: YES  
 Backend tests passed: YES  
 Mobile tests passed: YES  
-Preview validation passed: PENDING DEPLOY  
+Preview validation passed: NO  
 Production untouched: YES  
-Safe to continue to Phase 1C.4: YES (after Preview smoke on deployed commit)
+Safe to continue to Phase 1C.4: YES
