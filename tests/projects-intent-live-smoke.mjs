@@ -53,76 +53,89 @@ async function main() {
   const emptyGoal = await call({ goal: "" }, { token: TOKEN });
   check("empty goal -> 400", emptyGoal.status === 400, `got ${emptyGoal.status}`);
 
-  const clearFitness = await call(
+  const caseA = await call(
     {
-      goal: "Vreau să slăbesc 7 kg în 3 luni și să mă antrenez acasă",
+      goal: "Vreau să lansez propria mea platformă AI pentru piața din România",
     },
     { token: TOKEN },
   );
   check(
-    "clear fitness goal -> ready + fitness",
-    clearFitness.status === 200 &&
-      clearFitness.json?.success === true &&
-      clearFitness.json?.status === "ready" &&
-      clearFitness.json?.categorySlug === "fitness",
+    "Case A: platform AI launch -> ready + business, no clarification",
+    caseA.status === 200 &&
+      caseA.json?.success === true &&
+      caseA.json?.status === "ready" &&
+      caseA.json?.categorySlug === "business" &&
+      caseA.json?.status !== "needs_clarification",
     JSON.stringify({
-      status: clearFitness.status,
-      bodyStatus: clearFitness.json?.status,
-      category: clearFitness.json?.categorySlug,
+      status: caseA.status,
+      bodyStatus: caseA.json?.status,
+      category: caseA.json?.categorySlug,
     }),
   );
 
-  const clearBusiness = await call(
-    { goal: "Vreau să deschid o cafenea în Timișoara" },
-    { token: TOKEN },
-  );
+  const caseB = await call({ goal: "Vreau să slăbesc 7 kg" }, { token: TOKEN });
   check(
-    "clear business goal -> ready + business",
-    clearBusiness.status === 200 &&
-      clearBusiness.json?.status === "ready" &&
-      clearBusiness.json?.categorySlug === "business",
+    "Case B: weight-loss goal -> ready + fitness, no blocking clarification",
+    caseB.status === 200 &&
+      caseB.json?.success === true &&
+      caseB.json?.status === "ready" &&
+      caseB.json?.categorySlug === "fitness",
     JSON.stringify({
-      status: clearBusiness.status,
-      category: clearBusiness.json?.categorySlug,
+      status: caseB.status,
+      bodyStatus: caseB.json?.status,
+      category: caseB.json?.categorySlug,
     }),
   );
 
-  const vague = await call({ goal: "Vreau să mă dezvolt" }, { token: TOKEN });
+  const caseC = await call({ goal: "Vreau să mă dezvolt" }, { token: TOKEN });
+  const caseCQuestions = Array.isArray(caseC.json?.questions) ? caseC.json.questions : [];
   check(
-    "vague goal -> needs_clarification",
-    vague.status === 200 && vague.json?.status === "needs_clarification",
-    JSON.stringify({ status: vague.status, bodyStatus: vague.json?.status }),
+    "Case C: vague goal -> needs_clarification with 1-2 questions",
+    caseC.status === 200 &&
+      caseC.json?.status === "needs_clarification" &&
+      caseCQuestions.length >= 1 &&
+      caseCQuestions.length <= 2,
+    JSON.stringify({
+      status: caseC.status,
+      bodyStatus: caseC.json?.status,
+      questionCount: caseCQuestions.length,
+    }),
   );
 
-  if (vague.json?.status === "needs_clarification" && Array.isArray(vague.json?.questions)) {
-    const firstQuestionId = vague.json.questions[0]?.id;
-    if (firstQuestionId) {
-      const clarified = await call(
-        {
-          goal: "Vreau să mă dezvolt",
-          clarificationAnswers: [
-            {
-              questionId: firstQuestionId,
-              answer: "Vreau să îmi îmbunătățesc productivitatea la job în următoarele 3 luni",
-            },
-          ],
-        },
-        { token: TOKEN },
-      );
-      check(
-        "clarification re-analysis returns ready or needs_clarification safely",
-        clarified.status === 200 &&
-          (clarified.json?.status === "ready" || clarified.json?.status === "needs_clarification"),
-        JSON.stringify({ status: clarified.status, bodyStatus: clarified.json?.status }),
-      );
-    } else {
-      console.log("SKIP  clarification re-analysis (no question id)");
-    }
+  if (caseC.json?.status === "needs_clarification" && caseCQuestions.length > 0) {
+    const clarificationAnswers = caseCQuestions.map((question, index) => ({
+      questionId: question.id,
+      answer:
+        question.type === "single_choice" && Array.isArray(question.options) && question.options[0]
+          ? question.options[0].value
+          : index === 0
+            ? "Carieră și productivitate la job"
+            : "În următoarele 3 luni",
+    }));
+
+    const caseD = await call(
+      {
+        goal: "Vreau să mă dezvolt",
+        clarificationAnswers,
+      },
+      { token: TOKEN },
+    );
+
+    check(
+      "Case D: clarification resubmit -> ready or unsupported, never needs_clarification",
+      caseD.status === 200 &&
+        (caseD.json?.status === "ready" || caseD.json?.status === "unsupported") &&
+        caseD.json?.status !== "needs_clarification",
+      JSON.stringify({ status: caseD.status, bodyStatus: caseD.json?.status }),
+    );
+  } else {
+    console.log("SKIP  Case D (Case C did not return clarification questions)");
+    failed += 1;
   }
 
   check(
     "endpoint does not create project rows",
-    clearFitness.json && !clearFitness.json.project && !clearFitness.json.id,
+    caseB.json && !caseB.json.project && !caseB.json.id,
     "project payload leaked",
   );
 
