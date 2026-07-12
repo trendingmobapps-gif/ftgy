@@ -5,7 +5,10 @@ import { resolveSupabaseUser } from "../lib/auth/resolve-supabase-user.js";
 import { guardRequest } from "../lib/projects/http.js";
 import {
   analyzeProjectIntent,
+  applyClarificationRoundGuard,
+  hasClarificationAnswers,
   normalizeIntentModelResult,
+  CLARIFICATION_ROUND_UNSUPPORTED_MESSAGE,
 } from "../lib/projects/intent-analysis.js";
 import {
   validateIntentAnalysisInput,
@@ -134,7 +137,7 @@ describe("intent model normalization", () => {
     assert.equal(normalized.payload.suggestedName, "Lansare Salon Beauty");
   });
 
-  it("limits clarification questions to 3 and deduplicates ids", () => {
+  it("limits clarification questions to 2 and deduplicates ids", () => {
     const questions = sanitizeIntentQuestions([
       { id: "q1", question: "Întrebare 1", type: "text" },
       { id: "q1", question: "Duplicat", type: "text" },
@@ -142,7 +145,7 @@ describe("intent model normalization", () => {
       { id: "q3", question: "Întrebare 3", type: "text" },
       { id: "q4", question: "Întrebare 4", type: "text" },
     ]);
-    assert.equal(questions.length, 3);
+    assert.equal(questions.length, 2);
     assert.equal(questions[0].id, "q1");
   });
 
@@ -326,6 +329,192 @@ describe("intent endpoint handler", () => {
   });
 });
 
+describe("clarification round guard", () => {
+  it("blocks second needs_clarification when answers are present", () => {
+    const normalized = normalizeIntentModelResult(
+      {
+        status: "needs_clarification",
+        message: "Mai am nevoie de detalii",
+        questions: [{ id: "q1", question: "Ce vrei?", type: "text", options: null }],
+      },
+      { goal: "Vreau să mă dezvolt" },
+    );
+
+    const guarded = applyClarificationRoundGuard(normalized, {
+      goal: "Vreau să mă dezvolt",
+      clarificationAnswers: [{ questionId: "q1", answer: "Carieră" }],
+    });
+
+    assert.equal(guarded.ok, false);
+    assert.equal(guarded.reason, "second_clarification_round_blocked");
+  });
+
+  it("allows needs_clarification on first round without answers", () => {
+    const normalized = normalizeIntentModelResult(
+      {
+        status: "needs_clarification",
+        message: "Mai am nevoie de detalii",
+        questions: [{ id: "q1", question: "Ce vrei?", type: "text", options: null }],
+      },
+      { goal: "Vreau să mă dezvolt" },
+    );
+
+    const guarded = applyClarificationRoundGuard(normalized, { goal: "Vreau să mă dezvolt" });
+    assert.equal(guarded.ok, true);
+    assert.equal(guarded.payload.status, "needs_clarification");
+  });
+
+  it("repairs second-round clarification to ready when model complies", async () => {
+    let callCount = 0;
+    const fetchFn = async (url) => {
+      if (!url.includes("openai.com")) {
+        throw new Error("unexpected");
+      }
+      callCount += 1;
+      const status = callCount === 1 ? "needs_clarification" : "ready";
+      return {
+        ok: true,
+        async json() {
+          return {
+            choices: [
+              {
+                message: {
+                  content: JSON.stringify({
+                    status,
+                    categorySlug: status === "ready" ? "cariera" : null,
+                    confidence: status === "ready" ? 0.86 : 0.2,
+                    suggestedName: status === "ready" ? "Dezvoltare personală" : null,
+                    normalizedGoal: null,
+                    shortSummary: null,
+                    detectedIntent: null,
+                    firstStepTitle: null,
+                    firstStepDescription: null,
+                    suggestedToolId: null,
+                    recommendationReason: null,
+                    message: status === "needs_clarification" ? "Mai am nevoie de detalii" : null,
+                    questions:
+                      status === "needs_clarification"
+                        ? [{ id: "focus", question: "Pe ce vrei să te focusezi?", type: "text", options: null }]
+                        : [],
+                  }),
+                },
+              },
+            ],
+          };
+        },
+      };
+    };
+
+    const result = await analyzeProjectIntent(
+      {
+        goal: "Vreau să mă dezvolt",
+        clarificationAnswers: [{ questionId: "focus", answer: "Carieră" }],
+      },
+      { fetchFn, apiKey: "test" },
+    );
+
+    assert.equal(result.ok, true);
+    assert.equal(result.result.status, "ready");
+    assert.equal(result.result.categorySlug, "cariera");
+    assert.equal(callCount, 2);
+  });
+
+  it("converts persistent second-round clarification to unsupported", async () => {
+    const fetchFn = async (url) => {
+      if (!url.includes("openai.com")) {
+        throw new Error("unexpected");
+      }
+      return {
+        ok: true,
+        async json() {
+          return {
+            choices: [
+              {
+                message: {
+                  content: JSON.stringify({
+                    status: "needs_clarification",
+                    categorySlug: null,
+                    confidence: 0.2,
+                    suggestedName: null,
+                    normalizedGoal: null,
+                    shortSummary: null,
+                    detectedIntent: null,
+                    firstStepTitle: null,
+                    firstStepDescription: null,
+                    suggestedToolId: null,
+                    recommendationReason: null,
+                    message: "Mai am nevoie de detalii",
+                    questions: [{ id: "focus", question: "Ce vrei?", type: "text", options: null }],
+                  }),
+                },
+              },
+            ],
+          };
+        },
+      };
+    };
+
+    const result = await analyzeProjectIntent(
+      {
+        goal: "Vreau să mă dezvolt",
+        clarificationAnswers: [{ questionId: "focus", answer: "Carieră" }],
+      },
+      { fetchFn, apiKey: "test" },
+    );
+
+    assert.equal(result.ok, true);
+    assert.equal(result.result.status, "unsupported");
+    assert.equal(result.result.message, CLARIFICATION_ROUND_UNSUPPORTED_MESSAGE);
+  });
+
+  it("returns ready for clear platform AI launch goal", async () => {
+    const fetchFn = async (url) => {
+      if (!url.includes("openai.com")) {
+        throw new Error("unexpected");
+      }
+      return {
+        ok: true,
+        async json() {
+          return {
+            choices: [
+              {
+                message: {
+                  content: JSON.stringify({
+                    status: "ready",
+                    categorySlug: "business",
+                    confidence: 0.93,
+                    suggestedName: "Lansare platformă AI",
+                    normalizedGoal:
+                      "Vreau să lansez propria mea platformă AI pentru piața din România",
+                    shortSummary: null,
+                    detectedIntent: null,
+                    firstStepTitle: null,
+                    firstStepDescription: null,
+                    suggestedToolId: null,
+                    recommendationReason: null,
+                    message: null,
+                    questions: [],
+                  }),
+                },
+              },
+            ],
+          };
+        },
+      };
+    };
+
+    const result = await analyzeProjectIntent(
+      { goal: "Vreau să lansez propria mea platformă AI pentru piața din România" },
+      { fetchFn, apiKey: "test" },
+    );
+
+    assert.equal(result.ok, true);
+    assert.equal(result.result.status, "ready");
+    assert.equal(result.result.categorySlug, "business");
+    assert.equal(hasClarificationAnswers({ clarificationAnswers: [] }), false);
+  });
+});
+
 describe("analyzeProjectIntent service", () => {
   it("returns needs_clarification for vague goals from model", async () => {
     const fetchFn = async (url) => {
@@ -371,7 +560,7 @@ describe("analyzeProjectIntent service", () => {
 
     assert.equal(result.ok, true);
     assert.equal(result.result.status, "needs_clarification");
-    assert.ok(result.result.questions.length <= 3);
+    assert.ok(result.result.questions.length <= 2);
   });
 
   it("does not expose raw provider errors", async () => {
