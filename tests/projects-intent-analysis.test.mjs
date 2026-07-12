@@ -515,6 +515,87 @@ describe("clarification round guard", () => {
   });
 });
 
+describe("deterministic intent rules", () => {
+  it('"Slăbesc 10 kg" returns ready + fitness without OpenAI', async () => {
+    const result = await analyzeProjectIntent(
+      { goal: "Slăbesc 10 kg" },
+      { fetchFn: async () => { throw new Error("OpenAI should not be called"); }, apiKey: "test" },
+    );
+
+    assert.equal(result.ok, true);
+    assert.equal(result.result.status, "ready");
+    assert.equal(result.result.categorySlug, "fitness");
+  });
+
+  it('"Vreau să slăbesc 10 kg" returns ready + fitness without OpenAI', async () => {
+    const result = await analyzeProjectIntent(
+      { goal: "Vreau să slăbesc 10 kg" },
+      { fetchFn: async () => { throw new Error("OpenAI should not be called"); }, apiKey: "test" },
+    );
+
+    assert.equal(result.ok, true);
+    assert.equal(result.result.status, "ready");
+    assert.equal(result.result.categorySlug, "fitness");
+  });
+
+  it('"Vreau să mă dezvolt" can return needs_clarification with fitness option', async () => {
+    const result = await analyzeProjectIntent(
+      { goal: "Vreau să mă dezvolt" },
+      { fetchFn: async () => { throw new Error("OpenAI should not be called"); }, apiKey: "test" },
+    );
+
+    assert.equal(result.ok, true);
+    assert.equal(result.result.status, "needs_clarification");
+    const labels = result.result.questions[0].options.map((option) => option.label);
+    assert.ok(labels.some((label) => /fitness/i.test(label)));
+  });
+
+  it('overrides model needs_clarification for clear fitness goals', async () => {
+    const fetchFn = async (url) => {
+      if (!url.includes("openai.com")) {
+        throw new Error("unexpected");
+      }
+      return {
+        ok: true,
+        async json() {
+          return {
+            choices: [
+              {
+                message: {
+                  content: JSON.stringify({
+                    status: "needs_clarification",
+                    message: "În ce direcție vrei să te dezvolți?",
+                    questions: [
+                      {
+                        id: "direction",
+                        question: "În ce direcție vrei să te dezvolți?",
+                        type: "single_choice",
+                        options: [
+                          { id: "cariera", label: "Carieră", value: "cariera" },
+                          { id: "business", label: "Business", value: "business" },
+                        ],
+                      },
+                    ],
+                  }),
+                },
+              },
+            ],
+          };
+        },
+      };
+    };
+
+    const result = await analyzeProjectIntent(
+      { goal: "Slăbesc 10 kg" },
+      { fetchFn, apiKey: "test" },
+    );
+
+    assert.equal(result.ok, true);
+    assert.equal(result.result.status, "ready");
+    assert.equal(result.result.categorySlug, "fitness");
+  });
+});
+
 describe("analyzeProjectIntent service", () => {
   it("returns needs_clarification for vague goals from model", async () => {
     const fetchFn = async (url) => {
@@ -566,7 +647,7 @@ describe("analyzeProjectIntent service", () => {
   it("does not expose raw provider errors", async () => {
     const fetchFn = async () => ({ ok: false, status: 500 });
     const result = await analyzeProjectIntent(
-      { goal: "Vreau să deschid o cafenea în Timișoara" },
+      { goal: "Vreau să organizez evenimentele echipei remote din companie" },
       { fetchFn, apiKey: "test" },
     );
     assert.equal(result.ok, false);
