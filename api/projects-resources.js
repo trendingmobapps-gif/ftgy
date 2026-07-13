@@ -1,12 +1,8 @@
 import { guardRequest, sendSuccess, sendError } from "../lib/projects/http.js";
-import { isValidUuid } from "../lib/projects/validation.js";
 import { getProjectOwned } from "../lib/projects/repository.js";
 import { PROJECT_ERROR_CODES } from "../lib/projects/constants.js";
-import { prepareProjectAction } from "../lib/projects/brain/actions/service.js";
-import {
-  mapActionServiceError,
-  validatePrepareActionRequest,
-} from "../lib/projects/brain/actions/validation.js";
+import { getProjectResourcesView } from "../lib/projects/brain/resources/service.js";
+import { validateListActionResultsRequest } from "../lib/projects/brain/actions/validation.js";
 
 export default async function handler(req, res) {
   const guard = await guardRequest(req, res, { authMode: "user" });
@@ -16,9 +12,9 @@ export default async function handler(req, res) {
   const projectId = typeof body.projectId === "string" ? body.projectId.trim() : "";
   const stepId = typeof body.stepId === "string" ? body.stepId.trim() : "";
 
-  const validation = validatePrepareActionRequest({ projectId, stepId });
+  const validation = validateListActionResultsRequest({ projectId, stepId });
   if (!validation.ok) {
-    sendError(res, 400, "PROJECT_ACTION_VALIDATION_ERROR", "Datele cererii sunt invalide.", validation.fields);
+    sendError(res, 400, "PROJECT_RESOURCE_VALIDATION_ERROR", "Datele cererii sunt invalide.", validation.fields);
     return;
   }
 
@@ -31,7 +27,7 @@ export default async function handler(req, res) {
     });
 
     if (!owned.ok) {
-      sendError(res, 500, "PROJECT_ACTION_INTERNAL_ERROR", "Proiectul nu a putut fi încărcat.");
+      sendError(res, 500, "PROJECT_RESOURCE_INTERNAL_ERROR", "Proiectul nu a putut fi încărcat.");
       return;
     }
 
@@ -40,27 +36,23 @@ export default async function handler(req, res) {
       return;
     }
 
-    const result = await prepareProjectAction({
+    const result = await getProjectResourcesView({
       baseUrl,
       secretKey,
       userId: authenticatedUser.id,
-      project: owned.project,
       projectId,
-      stepId,
+      stepId: stepId || undefined,
     });
 
     if (!result.ok) {
-      const mapped = mapActionServiceError(result.code);
-      sendError(res, mapped.status, mapped.code, mapped.message);
+      sendError(res, 500, "PROJECT_RESOURCE_INTERNAL_ERROR", "Resursele nu au putut fi încărcate.");
       return;
     }
 
     sendSuccess(res, 200, {
-      action: result.action,
-      session: result.session,
-      executionDefinition: result.executionDefinition || null,
+      resources: result.resources,
     });
   } catch {
-    sendError(res, 500, "PROJECT_ACTION_INTERNAL_ERROR", "A apărut o eroare internă.");
+    sendError(res, 500, "PROJECT_RESOURCE_INTERNAL_ERROR", "A apărut o eroare internă.");
   }
 }

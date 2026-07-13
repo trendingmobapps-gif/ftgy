@@ -137,7 +137,7 @@ describe("intent model normalization", () => {
     assert.equal(normalized.payload.recommendedToolId, null);
   });
 
-  it("rejects invalid model category slug", () => {
+  it("falls back to universal for invalid model category slug", () => {
     const normalized = normalizeIntentModelResult(
       {
         status: "ready",
@@ -147,7 +147,8 @@ describe("intent model normalization", () => {
       },
       { goal: "Vreau să îmi cresc contul de TikTok" },
     );
-    assert.equal(normalized.ok, false);
+    assert.equal(normalized.ok, true);
+    assert.equal(normalized.payload.categorySlug, "universal");
   });
 
   it("preserves user-provided optional name", () => {
