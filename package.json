@@ -7,7 +7,7 @@
   "scripts": {
     "build": "echo \"No build step required for serverless API\"",
     "test:workflows": "node --test scripts/workflow-next-action.test.js scripts/generate-tool-contract.test.js scripts/generation-policy.test.js scripts/backend-contract.test.js",
-    "test:projects-intent": "node --test tests/projects-intent-analysis.test.mjs tests/projects-icon-assignment.test.mjs tests/projects-safety.test.mjs tests/projects-brain.test.mjs tests/projects-brain-service.test.mjs tests/projects-brain-actions.test.mjs tests/projects-brain-sessions.test.mjs tests/projects-brain-adaptive.test.mjs tests/projects-brain-execution-definition.test.mjs tests/projects-prepare-action-compat.test.mjs tests/projects-brain-catalog-parity.test.mjs tests/projects-assessment-interactive.test.mjs",
+    "test:projects-intent": "node --test tests/projects-intent-analysis.test.mjs tests/projects-icon-assignment.test.mjs tests/projects-safety.test.mjs tests/projects-brain.test.mjs tests/projects-brain-service.test.mjs tests/projects-brain-actions.test.mjs tests/projects-brain-sessions.test.mjs tests/projects-brain-adaptive.test.mjs tests/projects-brain-execution-definition.test.mjs tests/projects-prepare-action-compat.test.mjs tests/projects-brain-catalog-parity.test.mjs tests/projects-assessment-interactive.test.mjs tests/projects-contextual-interactive-generation.test.mjs tests/projects-ai-execution-plan.test.mjs",
     "smoke:projects-brain": "node tests/projects-brain-live-runner.mjs",
     "smoke:projects-actions": "node tests/projects-actions-live-smoke.mjs",
     "smoke:projects-intent": "node tests/projects-intent-live-smoke.mjs",

@@ -86,6 +86,7 @@ export default async function handler(req, res) {
       action: result.action,
       session: result.session,
       executionDefinition: result.executionDefinition || null,
+      executionPlan: result.executionPlan || null,
       interactivePayload: result.interactivePayload || null,
       savedAnswers: result.savedAnswers || {},
       currentQuestionIndex: result.currentQuestionIndex ?? 0,
