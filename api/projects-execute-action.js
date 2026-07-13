@@ -26,7 +26,7 @@ export default async function handler(req, res) {
       ? body.acceptedInput
       : {};
 
-  logExecuteStage("request_received", {
+  logExecuteStage("handler_request_received", {
     projectId,
     stepId,
     actionId,
@@ -79,7 +79,13 @@ export default async function handler(req, res) {
         stage: "execute_action_failed",
         serviceCode: result.code,
       });
-      sendError(res, mapped.status, mapped.code, mapped.message);
+      sendError(
+        res,
+        mapped.status,
+        mapped.code,
+        mapped.message,
+        result.details || result.fields || result.missingRequirements || null,
+      );
       return;
     }
 
