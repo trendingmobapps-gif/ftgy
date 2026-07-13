@@ -19,6 +19,7 @@ export default async function handler(req, res) {
   const { body, baseUrl, secretKey, authenticatedUser } = guard;
   const projectId = typeof body.projectId === "string" ? body.projectId.trim() : "";
   const stepId = typeof body.stepId === "string" ? body.stepId.trim() : "";
+  const forceRegenerateInvalidPlan = body.forceRegenerateInvalidPlan === true;
 
   logPrepareStage("request_received", {
     projectId,
@@ -72,6 +73,7 @@ export default async function handler(req, res) {
       project: owned.project,
       projectId,
       stepId,
+      forceRegenerateInvalidPlan,
     });
 
     if (!result.ok) {
