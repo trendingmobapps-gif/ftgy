@@ -3,7 +3,8 @@ import { isValidUuid } from "../lib/projects/validation.js";
 import { getProjectOwned } from "../lib/projects/repository.js";
 import { PROJECT_ERROR_CODES } from "../lib/projects/constants.js";
 import { PROJECT_BRAIN_ERROR_CODES } from "../lib/projects/brain/constants.js";
-import { generateProjectWorkflow } from "../lib/projects/brain/service.js";
+import { regenerateProjectWorkflow } from "../lib/projects/brain/service.js";
+import { logRoadmapLifecycleStage } from "../lib/projects/brain/generation-lifecycle-log.js";
 
 function mapServiceError(code, failureCode) {
   switch (code) {
@@ -90,13 +91,19 @@ export default async function handler(req, res) {
       return;
     }
 
-    const result = await generateProjectWorkflow({
+    logRoadmapLifecycleStage(console.log, {
+      stage: "roadmap_regenerate_requested",
+      projectId,
+      generationStatus: owned.project.brain_status,
+    });
+
+    const result = await regenerateProjectWorkflow({
       baseUrl,
       secretKey,
       userId: authenticatedUser.id,
       project: owned.project,
       clarificationAnswers: undefined,
-      logFn: console.log,
+      forceRetry: true,
     });
 
     if (!result.ok) {

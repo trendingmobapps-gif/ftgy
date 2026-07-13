@@ -15,6 +15,8 @@ export default async function handler(req, res) {
   const guard = await guardRequest(req, res, { authMode: "user" });
   if (!guard.ok) return;
 
+  console.log(JSON.stringify({ event: "project_roadmap_lifecycle", stage: "project_create_received" }));
+
   const { body, baseUrl, secretKey, authenticatedUser } = guard;
   const { valid, value, fields } = validateCreateInput(body);
   if (!valid) {
@@ -82,7 +84,33 @@ export default async function handler(req, res) {
       return;
     }
 
-    sendSuccess(res, 201, { project: serializeProject(result.project) });
+    console.log(
+      JSON.stringify({
+        event: "project_roadmap_lifecycle",
+        stage: "project_row_created",
+        projectId: result.project.id,
+        generationStatus: "queued",
+      }),
+    );
+
+    sendSuccess(res, 201, {
+      project: serializeProject(result.project),
+      projectId: result.project.id,
+      generationStatus: "queued",
+      workflowGenerated: false,
+      milestonesCount: 0,
+      stepsCount: 0,
+    });
+
+    console.log(
+      JSON.stringify({
+        event: "project_roadmap_lifecycle",
+        stage: "project_create_response_sent",
+        projectId: result.project.id,
+        generationStatus: "queued",
+        workflowGenerated: false,
+      }),
+    );
   } catch {
     sendError(res, 500, PROJECT_ERROR_CODES.INTERNAL, "A apărut o eroare internă.");
   }
