@@ -9,7 +9,10 @@ import {
 } from "../lib/projects/brain/actions/validation.js";
 import { logPrepareFailure, logPrepareStage } from "../lib/projects/brain/actions/prepare-stage-log.js";
 
+console.log("[projects-prepare-action] module_loaded");
+
 export default async function handler(req, res) {
+  console.log("[projects-prepare-action] handler_started");
   const guard = await guardRequest(req, res, { authMode: "user" });
   if (!guard.ok) return;
 
