@@ -6,6 +6,12 @@ import {
   mapActionServiceError,
   validateExecuteActionRequest,
 } from "../lib/projects/brain/actions/validation.js";
+import { PROJECT_ACTION_ERROR_CODES } from "../lib/projects/brain/actions/constants.js";
+import {
+  logExecuteFailure,
+  logExecuteStage,
+  safeAcceptedInputMetadata,
+} from "../lib/projects/brain/actions/execute-action-stage-log.js";
 
 export default async function handler(req, res) {
   const guard = await guardRequest(req, res, { authMode: "user" });
@@ -19,6 +25,13 @@ export default async function handler(req, res) {
     body.acceptedInput && typeof body.acceptedInput === "object" && !Array.isArray(body.acceptedInput)
       ? body.acceptedInput
       : {};
+
+  logExecuteStage("request_received", {
+    projectId,
+    stepId,
+    actionId,
+    ...safeAcceptedInputMetadata(acceptedInput),
+  });
 
   const validation = validateExecuteActionRequest({ projectId, stepId, actionId, acceptedInput });
   if (!validation.ok) {
@@ -35,7 +48,7 @@ export default async function handler(req, res) {
     });
 
     if (!owned.ok) {
-      sendError(res, 500, "PROJECT_ACTION_INTERNAL_ERROR", "Proiectul nu a putut fi încărcat.");
+      sendError(res, 500, PROJECT_ACTION_ERROR_CODES.INTERNAL, "Proiectul nu a putut fi încărcat.");
       return;
     }
 
@@ -43,6 +56,8 @@ export default async function handler(req, res) {
       sendError(res, 404, PROJECT_ERROR_CODES.NOT_FOUND, "Proiectul nu a fost găsit.");
       return;
     }
+
+    logExecuteStage("auth_success", { projectId, stepId, actionId });
 
     const result = await executeProjectAction({
       baseUrl,
@@ -57,6 +72,13 @@ export default async function handler(req, res) {
 
     if (!result.ok) {
       const mapped = mapActionServiceError(result.code);
+      logExecuteFailure(mapped.code, new Error(result.failureReason || mapped.message), {
+        projectId,
+        stepId,
+        actionId,
+        stage: "execute_action_failed",
+        serviceCode: result.code,
+      });
       sendError(res, mapped.status, mapped.code, mapped.message);
       return;
     }
@@ -68,7 +90,13 @@ export default async function handler(req, res) {
       requiresReview: Boolean(result.requiresReview),
       ...(result.view || {}),
     });
-  } catch {
-    sendError(res, 500, "PROJECT_ACTION_INTERNAL_ERROR", "A apărut o eroare internă.");
+  } catch (error) {
+    logExecuteFailure("execute_action_failed", error, { projectId, stepId, actionId });
+    sendError(
+      res,
+      502,
+      PROJECT_ACTION_ERROR_CODES.EXECUTION_FAILED,
+      "Nu am putut genera rezultatul.",
+    );
   }
 }
