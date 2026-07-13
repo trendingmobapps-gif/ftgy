@@ -94,6 +94,8 @@ export default async function handler(req, res) {
       executionDefinition: result.executionDefinition || null,
       executionPlan: result.executionPlan || null,
       interactivePayload: result.interactivePayload || null,
+      executionContract: result.executionContract || null,
+      contractValid: result.contractValid !== false,
       savedAnswers: result.savedAnswers || {},
       currentQuestionIndex: result.currentQuestionIndex ?? 0,
     });
