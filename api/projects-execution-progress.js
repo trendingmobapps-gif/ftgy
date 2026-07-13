@@ -1,29 +1,74 @@
 import { guardRequest, sendSuccess, sendError } from "../lib/projects/http.js";
 import { getProjectOwned } from "../lib/projects/repository.js";
 import { PROJECT_ERROR_CODES } from "../lib/projects/constants.js";
+import { PROJECT_ACTION_ERROR_CODES } from "../lib/projects/brain/actions/constants.js";
 import { saveExecutionProgress } from "../lib/projects/brain/actions/service.js";
 import {
   mapActionServiceError,
   validateExecutionProgressRequest,
 } from "../lib/projects/brain/actions/validation.js";
+import { logPrepareFailure } from "../lib/projects/brain/actions/prepare-stage-log.js";
+
+function logExecutionProgressFailure(stage, error, context = {}) {
+  logPrepareFailure(stage, error, {
+    endpoint: "/api/projects-execution-progress",
+    projectId: context.projectId || null,
+    stepId: context.stepId || null,
+    actionId: context.actionId || null,
+    progressType: context.progressType || null,
+    stage,
+  });
+}
 
 export default async function handler(req, res) {
-  const guard = await guardRequest(req, res, { authMode: "user" });
-  if (!guard.ok) return;
-
-  const { body, baseUrl, secretKey, authenticatedUser } = guard;
-  const projectId = typeof body.projectId === "string" ? body.projectId.trim() : "";
-  const stepId = typeof body.stepId === "string" ? body.stepId.trim() : "";
-  const actionId = typeof body.actionId === "string" ? body.actionId.trim() : "";
-  const progress = body.progress && typeof body.progress === "object" ? body.progress : {};
-
-  const validation = validateExecutionProgressRequest({ projectId, stepId, actionId, progress });
-  if (!validation.ok) {
-    sendError(res, 400, "PROJECT_ACTION_VALIDATION_ERROR", "Datele cererii sunt invalide.", validation.fields);
-    return;
-  }
+  let requestContext = {
+    projectId: null,
+    stepId: null,
+    actionId: null,
+    progressType: null,
+  };
 
   try {
+    const guard = await guardRequest(req, res, { authMode: "user" });
+    if (!guard.ok) return;
+
+    const { body, baseUrl, secretKey, authenticatedUser } = guard;
+    const projectId = typeof body.projectId === "string" ? body.projectId.trim() : "";
+    const stepId = typeof body.stepId === "string" ? body.stepId.trim() : "";
+    const actionId = typeof body.actionId === "string" ? body.actionId.trim() : "";
+    const progress = body.progress && typeof body.progress === "object" ? body.progress : {};
+
+    requestContext = {
+      projectId,
+      stepId,
+      actionId,
+      progressType: typeof progress.type === "string" ? progress.type : null,
+    };
+
+    if (typeof validateExecutionProgressRequest !== "function") {
+      const error = new Error("validateExecutionProgressRequest is unavailable");
+      logExecutionProgressFailure("validator_missing", error, requestContext);
+      sendError(
+        res,
+        500,
+        PROJECT_ACTION_ERROR_CODES.EXECUTION_PROGRESS_INTERNAL,
+        "Nu am putut salva progresul.",
+      );
+      return;
+    }
+
+    const validation = validateExecutionProgressRequest({ projectId, stepId, actionId, progress });
+    if (!validation.ok) {
+      sendError(
+        res,
+        400,
+        PROJECT_ACTION_ERROR_CODES.EXECUTION_PROGRESS_VALIDATION,
+        "Datele progresului sunt invalide.",
+        validation.fields,
+      );
+      return;
+    }
+
     const owned = await getProjectOwned({
       baseUrl,
       secretKey,
@@ -32,7 +77,17 @@ export default async function handler(req, res) {
     });
 
     if (!owned.ok) {
-      sendError(res, 500, "PROJECT_ACTION_INTERNAL_ERROR", "Proiectul nu a putut fi încărcat.");
+      logExecutionProgressFailure(
+        "project_loaded",
+        new Error("Project lookup failed"),
+        requestContext,
+      );
+      sendError(
+        res,
+        500,
+        PROJECT_ACTION_ERROR_CODES.EXECUTION_PROGRESS_INTERNAL,
+        "Nu am putut salva progresul.",
+      );
       return;
     }
 
@@ -49,7 +104,7 @@ export default async function handler(req, res) {
       projectId,
       stepId,
       actionId,
-      progress,
+      progress: validation.normalizedProgress || progress,
     });
 
     if (!result.ok) {
@@ -64,7 +119,13 @@ export default async function handler(req, res) {
       canFinalize: Boolean(result.canFinalize),
       missingRequirements: result.missingRequirements || [],
     });
-  } catch {
-    sendError(res, 500, "PROJECT_ACTION_INTERNAL_ERROR", "A apărut o eroare internă.");
+  } catch (error) {
+    logExecutionProgressFailure("handler", error, requestContext);
+    sendError(
+      res,
+      500,
+      PROJECT_ACTION_ERROR_CODES.EXECUTION_PROGRESS_INTERNAL,
+      "Nu am putut salva progresul.",
+    );
   }
 }

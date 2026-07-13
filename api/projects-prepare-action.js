@@ -88,6 +88,7 @@ export default async function handler(req, res) {
     }
 
     sendSuccess(res, 200, {
+      readOnly: Boolean(result.readOnly),
       action: result.action,
       session: result.session,
       executionDefinition: result.executionDefinition || null,
