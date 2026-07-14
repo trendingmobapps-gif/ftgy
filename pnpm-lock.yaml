@@ -17,6 +17,9 @@ importers:
       pdf-parse:
         specifier: ^1.1.1
         version: 1.1.1
+      postgres:
+        specifier: ^3.4.7
+        version: 3.4.9
 
 packages:
 
@@ -112,6 +115,10 @@ packages:
   pdf-parse@1.1.1:
     resolution: {integrity: sha512-v6ZJ/efsBpGrGGknjtq9J/oC8tZWq0KWL5vQrk2GlzLEQPUDB1ex+13Rmidl1neNN358Jn9EHZw5y07FFtaC7A==}
     engines: {node: '>=6.8.1'}
+
+  postgres@3.4.9:
+    resolution: {integrity: sha512-GD3qdB0x1z9xgFI6cdRD6xu2Sp2WCOEoe3mtnyB5Ee0XrrL5Pe+e4CCnJrRMnL1zYtRDZmQQVbvOttLnKDLnaw==}
+    engines: {node: '>=12'}
 
   process-nextick-args@2.0.1:
     resolution: {integrity: sha512-3ouUOpQhtgrbOa17J7+uxOTpITYWaGP7/AhoR3+A+/1e9skrzelGi/dXzEYyvbxubEF6Wn2ypscTKiKJFFn1ag==}
@@ -243,6 +250,8 @@ snapshots:
       node-ensure: 0.0.0
     transitivePeerDependencies:
       - supports-color
+
+  postgres@3.4.9: {}
 
   process-nextick-args@2.0.1: {}
 
