@@ -74,7 +74,7 @@ function buildBundle() {
   };
 }
 
-function createLegacySchemaFetch(bundle) {
+function createLegacySchemaFetch(bundle, onActionWrite = null) {
   return async (url, init = {}) => {
     const method = init.method || "GET";
     const parsed = new URL(String(url));
@@ -125,6 +125,7 @@ function createLegacySchemaFetch(bundle) {
 
     if (parsed.pathname.endsWith("/project_step_actions") && method === "POST") {
       const body = JSON.parse(init.body || "{}");
+      onActionWrite?.(body);
       return jsonResponse(201, [
         {
           id: "dddddddd-dddd-4ddd-8ddd-dddddddddddd",
@@ -143,6 +144,7 @@ function createLegacySchemaFetch(bundle) {
 
 describe("prepare action compatibility", () => {
   let originalFetch = globalThis.fetch;
+  let originalDecisionFlag = process.env.PROJECT_BRAIN_DECISION_LAYER_ENABLED;
 
   beforeEach(() => {
     resetActionSchemaCapabilitiesForTests();
@@ -150,6 +152,11 @@ describe("prepare action compatibility", () => {
 
   afterEach(() => {
     globalThis.fetch = originalFetch;
+    if (originalDecisionFlag === undefined) {
+      delete process.env.PROJECT_BRAIN_DECISION_LAYER_ENABLED;
+    } else {
+      process.env.PROJECT_BRAIN_DECISION_LAYER_ENABLED = originalDecisionFlag;
+    }
   });
 
   it("normalizes legacy action JSON fields", () => {
@@ -204,5 +211,36 @@ describe("prepare action compatibility", () => {
     assert.equal(session.phase, "collecting");
     assert.equal(session.canRespond, true);
     assert.equal(session.messages.length, 1);
+  });
+
+  it("persists and safely exposes the deterministic decision when enabled", async () => {
+    const bundle = buildBundle();
+    let persistedAction = null;
+    process.env.PROJECT_BRAIN_DECISION_LAYER_ENABLED = "true";
+    globalThis.fetch = createLegacySchemaFetch(bundle, (body) => {
+      persistedAction = body;
+    });
+
+    const result = await prepareProjectAction({
+      baseUrl: "https://example.supabase.co",
+      secretKey: "service-role-key",
+      userId: USER_ID,
+      project: buildProject(),
+      projectId: PROJECT_ID,
+      stepId: STEP_ID,
+    });
+
+    assert.equal(result.ok, true);
+    assert.equal(result.brainDecision.decisionVersion, 1);
+    assert.ok(result.brainDecision.decisionId);
+    assert.ok(persistedAction?.prepared_input?._brainDecision);
+    assert.equal(persistedAction.prepared_input._brainDecisionVersion, 1);
+    assert.ok(persistedAction.prepared_input._brainDecisionEvidenceHash);
+    assert.equal("knownContext" in result.brainDecision, false);
+    assert.equal("confidence" in result.brainDecision, false);
+    assert.equal("modelMetadata" in result.brainDecision, false);
+    assert.equal("_brainDecision" in result.action.preparedInput, false);
+    assert.equal("_brainDecisionEvidenceHash" in result.action.preparedInput, false);
+    assert.equal("_brainDecision" in result.preparation.preparedInput, false);
   });
 });
