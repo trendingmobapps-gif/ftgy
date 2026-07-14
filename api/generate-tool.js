@@ -1,0 +1,957 @@
+// Vercel Serverless Function: POST /api/generate-tool
+// Generates a tool-specific result using OpenAI, based on the tool config.
+//
+// Accepts BOTH:
+//   1) multipart/form-data  -> fields: toolId, input (JSON string), categorySlug
+//      (optional), and an optional file field `fisierMaterial`. The file is
+//      parsed in-memory, its text is extracted, and the file is NOT stored.
+//   2) application/json      -> { toolId, input | userInput, categorySlug }.
+//      For backward compatibility, `fisierMaterial` may be a public URL string.
+
+import { TOOLS } from "../tools/tools-config.js";
+import {
+  buildSharedUserPromptSuffix,
+  countWords,
+  resolveGenerationConfig,
+  supportsCustomSampling,
+} from "../tools/generation-policy.js";
+import { buildWorkflowRecommendationFields } from "../workflows/build-generation-response.js";
+import formidable from "formidable";
+import { randomUUID } from "node:crypto";
+import { readFile, unlink } from "node:fs/promises";
+
+function firstNonEmpty(...candidates) {
+  for (const candidate of candidates) {
+    if (candidate === undefined || candidate === null) continue;
+    const value = String(candidate).trim();
+    if (value) return value;
+  }
+  return "";
+}
+
+// Disable Vercel/Next automatic body parsing so we can read the raw stream for
+// multipart/form-data with formidable. (No effect on plain Vercel functions for
+// multipart, which is never auto-parsed; kept for correctness/future-proofing.)
+export const config = {
+  api: {
+    bodyParser: false,
+  },
+};
+
+// Maximum uploaded file size (10MB).
+const MAX_FILE_SIZE = 10 * 1024 * 1024;
+
+// Maximum number of characters of extracted document text we keep, so we don't
+// blow past the model context window.
+const MAX_EXTRACTED_CHARS = 40000;
+
+// Detects OpenAI errors that mean "this model is unavailable for this account",
+// so we fall back to the next model instead of failing the request.
+function isModelUnavailableError(status, errText) {
+  if (status === 404) return true;
+  const t = String(errText || "").toLowerCase();
+  return (
+    t.includes("does not exist") ||
+    t.includes("do not have access") ||
+    t.includes("not have access") ||
+    t.includes("unknown model") ||
+    t.includes("invalid model") ||
+    t.includes("model_not_found") ||
+    t.includes("is not supported")
+  );
+}
+
+// Robustly extracts the generated text from an OpenAI response, supporting both
+// the Responses API (output_text / output[].content[].text) and the older
+// chat/completions shape (choices[0].message.content) as a safety net.
+function extractResponseText(data) {
+  if (!data || typeof data !== "object") return "";
+
+  // Responses API convenience field.
+  if (typeof data.output_text === "string" && data.output_text.trim()) {
+    return data.output_text.trim();
+  }
+
+  // Responses API structured output array.
+  if (Array.isArray(data.output)) {
+    const text = data.output
+      .flatMap((item) => (Array.isArray(item?.content) ? item.content : []))
+      .map((c) => (typeof c?.text === "string" ? c.text : ""))
+      .join("")
+      .trim();
+    if (text) return text;
+  }
+
+  // Chat/completions fallback.
+  const chat = data?.choices?.[0]?.message?.content;
+  if (typeof chat === "string" && chat.trim()) return chat.trim();
+
+  return "";
+}
+
+// Calls the OpenAI Responses API using the shared generation policy.
+// Falls back to the next model only on model-unavailability errors.
+// At most one network retry per model for transient failures.
+async function callToolModel({
+  systemPrompt,
+  userPrompt,
+  apiKey,
+  models,
+  maxOutputTokens,
+  temperature,
+}) {
+  let lastError = "";
+  const attemptedModels = [];
+
+  for (const model of models) {
+    attemptedModels.push(model);
+    const body = {
+      model,
+      instructions: systemPrompt,
+      input: userPrompt,
+      max_output_tokens: maxOutputTokens,
+    };
+    if (supportsCustomSampling(model)) {
+      body.temperature = temperature;
+      body.top_p = 0.9;
+    }
+
+    let networkRetried = false;
+    while (true) {
+      const openaiStartedAt = Date.now();
+      let openaiRes;
+      try {
+        openaiRes = await fetch("https://api.openai.com/v1/responses", {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${apiKey}`,
+          },
+          body: JSON.stringify(body),
+        });
+      } catch (e) {
+        lastError = e?.message || "network error";
+        if (!networkRetried) {
+          networkRetried = true;
+          console.log("[PERF generate-tool] openai network retry", { model });
+          continue;
+        }
+        break;
+      }
+
+      const openaiRequestMs = Date.now() - openaiStartedAt;
+
+      if (openaiRes.ok) {
+        const data = await openaiRes.json();
+        const text = extractResponseText(data);
+        if (text) {
+          return { data, model, text, openaiRequestMs, attemptedModels };
+        }
+
+        console.log("[PERF generate-tool] empty response from model", {
+          model,
+          openaiRequestMs,
+          status: data?.status,
+        });
+        lastError = "empty response";
+        break;
+      }
+
+      const errText = await openaiRes.text();
+      lastError = errText;
+      console.log("[PERF generate-tool] openai model error", {
+        model,
+        status: openaiRes.status,
+        openaiRequestMs,
+      });
+
+      if (!isModelUnavailableError(openaiRes.status, errText)) {
+        return {
+          error: lastError,
+          openaiRequestMs,
+          attemptedModels,
+        };
+      }
+      break;
+    }
+  }
+
+  return { error: lastError, attemptedModels };
+}
+
+// Generic message when a file exists but cannot be read/parsed.
+const FILE_UNREADABLE_MESSAGE =
+  "Fișierul nu a putut fi citit. Încearcă alt document sau copiază textul manual.";
+
+// Message returned when a PDF has no selectable text (scanned/image-only).
+const SCANNED_PDF_MESSAGE =
+  "PDF-ul pare scanat sau imagine. Te rog încarcă un PDF text-based sau copiază textul manual.";
+
+function setCorsHeaders(res) {
+  // Allow the endpoint to be called from your Wix website (and any other origin).
+  res.setHeader("Access-Control-Allow-Origin", "*");
+  res.setHeader("Access-Control-Allow-Methods", "POST, OPTIONS");
+  res.setHeader("Access-Control-Allow-Headers", "Content-Type, Authorization");
+  res.setHeader("Access-Control-Max-Age", "86400");
+}
+
+// Parses a multipart/form-data request using formidable. Returns { fields, files }.
+function parseMultipartForm(req) {
+  const form = formidable({
+    maxFiles: 1,
+    maxFileSize: MAX_FILE_SIZE,
+    keepExtensions: true,
+    multiples: false,
+  });
+  return new Promise((resolve, reject) => {
+    form.parse(req, (err, fields, files) => {
+      if (err) {
+        reject(err);
+        return;
+      }
+      resolve({ fields, files });
+    });
+  });
+}
+
+// formidable v3 returns every field/file as an array. Read the first value.
+function firstValue(value) {
+  if (Array.isArray(value)) return value[0];
+  return value;
+}
+
+// Reads and JSON-parses the raw request body from the stream. Used as a fallback
+// for the JSON flow when automatic body parsing is disabled (bodyParser: false)
+// or unavailable, so the endpoint works regardless of platform behavior.
+function readJsonBody(req) {
+  return new Promise((resolve) => {
+    let raw = "";
+    req.on("data", (chunk) => {
+      raw += chunk;
+    });
+    req.on("end", () => {
+      if (!raw) {
+        resolve({});
+        return;
+      }
+      try {
+        resolve(JSON.parse(raw));
+      } catch {
+        resolve({});
+      }
+    });
+    req.on("error", () => resolve({}));
+  });
+}
+
+// Extracts plain text from an in-memory file buffer based on its filename
+// extension and mimetype. Supports PDF, DOCX and TXT. Returns trimmed text.
+async function extractTextFromBuffer(buffer, { filename = "", mimetype = "" } = {}) {
+  if (!buffer || buffer.length === 0) {
+    throw new Error(FILE_UNREADABLE_MESSAGE);
+  }
+
+  const lowerName = String(filename).split("?")[0].toLowerCase();
+  const ext = lowerName.includes(".")
+    ? lowerName.slice(lowerName.lastIndexOf(".") + 1)
+    : "";
+  const ct = String(mimetype).toLowerCase();
+
+  const isPdf = ext === "pdf" || ct.includes("application/pdf");
+  const isDocx =
+    ext === "docx" || ct.includes("officedocument.wordprocessingml");
+  const isDoc = ext === "doc" || ct === "application/msword";
+  const isTxt =
+    ext === "txt" || ct.includes("text/plain") || ct.startsWith("text/");
+
+  // Debug: log details about the file being processed.
+  console.log("[v0] Extracting file:", filename || "(no name)");
+  console.log("[v0] File mimetype:", mimetype || "(none)");
+  console.log("[v0] File size:", buffer.length, "bytes");
+
+  let text = "";
+
+  if (isPdf) {
+    // pdf-parse v1.1.1 is a pure-Node parser that does NOT require browser APIs
+    // like DOMMatrix/document/canvas (unlike pdfjs-dist based versions).
+    // Import the lib file directly to skip the package's debug entrypoint.
+    const pdfParse = (await import("pdf-parse/lib/pdf-parse.js")).default;
+    try {
+      const data = await pdfParse(buffer);
+      text = (data?.text || "").trim();
+    } catch (error) {
+      console.log("[v0] PDF parser error:", error);
+      throw new Error(SCANNED_PDF_MESSAGE);
+    }
+    if (!text) {
+      // Parsed fine but contains no extractable text -> scanned/image PDF.
+      throw new Error(SCANNED_PDF_MESSAGE);
+    }
+  } else if (isDocx) {
+    const mammoth = (await import("mammoth")).default;
+    const result = await mammoth.extractRawText({ buffer });
+    text = (result?.value || "").trim();
+  } else if (isTxt) {
+    text = buffer.toString("utf-8").trim();
+  } else if (isDoc) {
+    // Legacy binary .doc is not reliably parseable here.
+    throw new Error(
+      "Formatul .doc nu este suportat. Formatele recomandate sunt .pdf, .docx sau .txt, sau copiază textul manual.",
+    );
+  } else {
+    // Unknown type: best-effort read as plain text.
+    text = buffer.toString("utf-8").trim();
+    if (!text) {
+      throw new Error(FILE_UNREADABLE_MESSAGE);
+    }
+  }
+
+  if (!text) {
+    throw new Error(FILE_UNREADABLE_MESSAGE);
+  }
+
+  // Limit extracted text so we don't exceed the model context window.
+  if (text.length > MAX_EXTRACTED_CHARS) {
+    text =
+      text.slice(0, MAX_EXTRACTED_CHARS) +
+      "\n\n[Text trunchiat pentru limită de lungime.]";
+  }
+
+  return text;
+}
+
+// Backward-compatibility helper for the JSON flow: when `fisierMaterial` is a
+// public URL string, download it and extract its text. (No Wix credentials.)
+async function extractTextFromUrl(url) {
+  const cleanInput = String(url || "").trim();
+  if (!/^https?:\/\//i.test(cleanInput)) {
+    throw new Error(FILE_UNREADABLE_MESSAGE);
+  }
+
+  const response = await fetch(cleanInput);
+  if (!response.ok) {
+    throw new Error(
+      `Nu am putut descărca fișierul (status ${response.status}).`,
+    );
+  }
+
+  const contentType = (response.headers.get("content-type") || "").toLowerCase();
+  const arrayBuffer = await response.arrayBuffer();
+  const buffer = Buffer.from(arrayBuffer);
+  const cleanUrl = cleanInput.split("?")[0];
+
+  return extractTextFromBuffer(buffer, {
+    filename: cleanUrl,
+    mimetype: contentType,
+  });
+}
+
+export default async function handler(req, res) {
+  const requestStartedAt = Date.now();
+  const timings = {
+    configLoadMs: 0,
+    moderationMs: 0,
+    promptBuildMs: 0,
+    openaiRequestMs: 0,
+    workflowResolveMs: 0,
+    responseFormatMs: 0,
+    totalMs: 0,
+  };
+
+  setCorsHeaders(res);
+
+  // Handle CORS preflight.
+  if (req.method === "OPTIONS") {
+    res.status(204).end();
+    return;
+  }
+
+  if (req.method !== "POST") {
+    res.status(405).json({
+      success: false,
+      message: "Method not allowed. Use POST.",
+    });
+    return;
+  }
+
+  // --- Parse the request: multipart/form-data OR application/json ---
+  let toolId = "";
+  let userInput = null;
+  let categorySlug = "";
+  // In-memory uploaded file (multipart only): { buffer, filename, mimetype }.
+  let uploadedFile = null;
+  // Improve mode: regenerate an improved version of a previous result.
+  let improveMode = false;
+  let previousResult = "";
+  let improvementInstruction = "";
+  let workflowContext = null;
+  let normalizedEmail = "";
+  let memberId = null;
+  let idempotencyKey = null;
+  let toolSlug = "";
+
+  const contentType = String(req.headers["content-type"] || "").toLowerCase();
+
+  if (contentType.includes("multipart/form-data")) {
+    let tmpFilePath = "";
+    try {
+      const { fields, files } = await parseMultipartForm(req);
+
+      toolId = String(firstValue(fields.toolId) || "").trim();
+      categorySlug = String(firstValue(fields.categorySlug) || "").trim();
+      toolSlug = String(
+        firstValue(fields.toolSlug) ||
+          firstValue(fields.slugInstrument) ||
+          toolId,
+      ).trim();
+      normalizedEmail = firstNonEmpty(
+        firstValue(fields.email),
+        firstValue(fields.userEmail),
+        firstValue(fields.memberEmail),
+      ).toLowerCase();
+      memberId =
+        firstNonEmpty(firstValue(fields.memberId), firstValue(fields.wixMemberId)) ||
+        null;
+      idempotencyKey =
+        firstNonEmpty(firstValue(fields.idempotencyKey), firstValue(fields.requestId)) ||
+        null;
+
+      // Improve mode fields (optional).
+      const improveRaw = firstValue(fields.improveMode);
+      improveMode = improveRaw === true || String(improveRaw) === "true";
+      previousResult = String(firstValue(fields.previousResult) || "");
+      improvementInstruction = String(
+        firstValue(fields.improvementInstruction) || "",
+      );
+
+      // `input` is a JSON string; accept `userInput` as an alias.
+      const inputRaw = firstValue(fields.input) ?? firstValue(fields.userInput);
+      if (inputRaw) {
+        try {
+          userInput =
+            typeof inputRaw === "string" ? JSON.parse(inputRaw) : inputRaw;
+        } catch {
+          userInput = null;
+        }
+      }
+
+      // Optional uploaded file field: `fisierMaterial`.
+      const fileObj = firstValue(files.fisierMaterial);
+      if (fileObj && fileObj.filepath) {
+        tmpFilePath = fileObj.filepath;
+        const buffer = await readFile(fileObj.filepath);
+        uploadedFile = {
+          buffer,
+          filename: fileObj.originalFilename || fileObj.newFilename || "",
+          mimetype: fileObj.mimetype || "",
+        };
+      }
+    } catch (error) {
+      console.log("[v0] Multipart parse error:", error?.message);
+      const tooLarge = /maxFileSize|exceeded|maxTotalFileSize/i.test(
+        error?.message || "",
+      );
+      res.status(200).json({
+        success: false,
+        message: tooLarge
+          ? "Fișierul este prea mare. Limita este de 10MB."
+          : "Nu am putut procesa datele trimise. Verifică formularul și încearcă din nou.",
+      });
+      return;
+    } finally {
+      // Never persist the uploaded file: delete the temp file after reading.
+      if (tmpFilePath) {
+        try {
+          await unlink(tmpFilePath);
+        } catch {
+          // ignore cleanup errors
+        }
+      }
+    }
+  } else {
+    // JSON flow. Use the pre-parsed body if available; otherwise read the raw
+    // stream (needed when bodyParser is disabled or not provided by the host).
+    let body = req.body;
+    if (typeof body === "string") {
+      try {
+        body = JSON.parse(body || "{}");
+      } catch {
+        body = {};
+      }
+    }
+    if (!body || typeof body !== "object") {
+      body = await readJsonBody(req);
+    }
+    body = body || {};
+
+    toolId = typeof body.toolId === "string" ? body.toolId.trim() : "";
+    categorySlug =
+      typeof body.categorySlug === "string" ? body.categorySlug.trim() : "";
+    toolSlug = firstNonEmpty(body.toolSlug, body.slugInstrument, toolId);
+    normalizedEmail = firstNonEmpty(
+      body.email,
+      body.userEmail,
+      body.memberEmail,
+      body.clientEmail,
+    ).toLowerCase();
+    memberId = firstNonEmpty(body.memberId, body.wixMemberId) || null;
+    idempotencyKey = firstNonEmpty(body.idempotencyKey, body.requestId) || null;
+
+    // Improve mode fields (optional).
+    improveMode = body.improveMode === true || body.improveMode === "true";
+    previousResult =
+      typeof body.previousResult === "string" ? body.previousResult : "";
+    improvementInstruction =
+      typeof body.improvementInstruction === "string"
+        ? body.improvementInstruction
+        : "";
+
+    if (body.workflowContext && typeof body.workflowContext === "object") {
+      workflowContext = {
+        workflowId:
+          typeof body.workflowContext.workflowId === "string"
+            ? body.workflowContext.workflowId.trim()
+            : undefined,
+        sourceStepId:
+          typeof body.workflowContext.sourceStepId === "string"
+            ? body.workflowContext.sourceStepId.trim()
+            : undefined,
+      };
+    }
+
+    // Accept both `userInput` (existing frontend) and `input` (string or object).
+    if (body.userInput && typeof body.userInput === "object") {
+      userInput = body.userInput;
+    } else if (body.input && typeof body.input === "object") {
+      userInput = body.input;
+    } else if (typeof body.input === "string") {
+      try {
+        userInput = JSON.parse(body.input);
+      } catch {
+        userInput = null;
+      }
+    }
+  }
+
+  // Debug: log payload shape without sensitive content.
+  const inputCharacterCount = userInput
+    ? JSON.stringify(userInput).length
+    : 0;
+  console.log("[v0] Incoming toolId:", toolId);
+  console.log("[v0] Incoming input character count:", inputCharacterCount);
+  console.log(
+    "[v0] Uploaded file:",
+    uploadedFile
+      ? `${uploadedFile.filename} (${uploadedFile.mimetype}, ${uploadedFile.buffer.length} bytes)`
+      : "(none)",
+  );
+
+  // Validate toolId.
+  if (!toolId) {
+    res.status(200).json({
+      success: false,
+      message: "Lipsește toolId.",
+    });
+    return;
+  }
+
+  // Validate that the tool exists.
+  const configLoadStartedAt = Date.now();
+  const tool = TOOLS[toolId];
+  timings.configLoadMs = Date.now() - configLoadStartedAt;
+
+  if (!tool) {
+    res.status(200).json({
+      success: false,
+      message:
+        "Instrumentul nu a fost găsit în configurația Vercel. Verifică ToolId în Wix CMS și tools-config.js.",
+    });
+    return;
+  }
+
+  // Validate userInput object.
+  if (!userInput || typeof userInput !== "object") {
+    res.status(200).json({
+      success: false,
+      message: "Lipsește input sau nu este un obiect valid.",
+    });
+    return;
+  }
+
+  // In improve mode, require a meaningful improvement instruction.
+  if (improveMode && improvementInstruction.trim().length < 3) {
+    res.status(200).json({
+      success: false,
+      message: "Te rugăm să scrii ce vrei să modificăm.",
+    });
+    return;
+  }
+
+  // Validate required fields from the tool config.
+  const missingFields = (tool.requiredFields || []).filter((field) => {
+    const value = userInput[field];
+    return value === undefined || value === null || String(value).trim() === "";
+  });
+
+  if (missingFields.length > 0) {
+    res.status(200).json({
+      success: false,
+      message: `Câmpuri obligatorii lipsă: ${missingFields.join(", ")}`,
+    });
+    return;
+  }
+
+  const apiKey = process.env.OPENAI_API_KEY;
+  if (!apiKey) {
+    res.status(200).json({
+      success: false,
+      message: "OpenAI error: OPENAI_API_KEY is not set.",
+    });
+    return;
+  }
+
+  // Format the user input clearly for the model (only the tool's relevant fields).
+  const formattedInput = (tool.requiredFields || [])
+    .map((field) => `- ${field}: ${String(userInput[field]).trim()}`)
+    .join("\n");
+
+  const UNSAFE_MESSAGE =
+    "Răspunsul nu a putut fi generat deoarece cererea conține informații nepotrivite, ilegale sau care nu respectă regulile platformei.";
+
+  // --- Safety filter (runs BEFORE generation) ---
+  // 1) Lightweight keyword pre-check on toolId, categorySlug and all user input values.
+  const combinedText = [
+    toolId,
+    categorySlug,
+    improvementInstruction,
+    ...Object.values(userInput).map((v) => String(v)),
+  ]
+    .join(" ")
+    .toLowerCase();
+
+  const UNSAFE_PATTERNS = [
+    /\bbomb(a|e)?\b/,
+    /\bexploziv/,
+    /\barm[ăa]\b|\bweapon|\bgun\b|\bpistol/,
+    /\bdrog(uri)?\b|\bcocain|\bheroin|\bmeth|\bmarijuana|\bcannabis/,
+    /\bhack(ing|uire)?\b|\bmalware|\bransomware|\bphishing/,
+    /\bscam|\binsel[ăa]ciune|\bfrauda?\b|\bspala(re)? de bani|\bmoney launder/,
+    /\bsinucid|\bself[-\s]?harm|\bautomutil/,
+    /\bporn|\bsexual explicit|\bsex explicit|\bchild abuse|\bpedofil/,
+    /\bomor|\bucide|\bkill\b|\bterror/,
+  ];
+
+  const keywordUnsafe = UNSAFE_PATTERNS.some((re) => re.test(combinedText));
+  if (keywordUnsafe) {
+    res.status(200).json({ success: false, message: UNSAFE_MESSAGE });
+    return;
+  }
+
+  const generationConfig = resolveGenerationConfig(toolId, tool);
+
+  // 2) OpenAI Moderation API check on the combined input.
+  const moderationStartedAt = Date.now();
+  try {
+    const modRes = await fetch("https://api.openai.com/v1/moderations", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${apiKey}`,
+      },
+      body: JSON.stringify({
+        model: "omni-moderation-latest",
+        input: `Tool: ${toolId}\nCategorie: ${categorySlug}\nDate:\n${formattedInput}${
+          improveMode ? `\nModificare cerută:\n${improvementInstruction}` : ""
+        }`,
+      }),
+    });
+
+    if (modRes.ok) {
+      const modData = await modRes.json();
+      const flagged = modData?.results?.[0]?.flagged === true;
+      if (flagged) {
+        res.status(200).json({ success: false, message: UNSAFE_MESSAGE });
+        return;
+      }
+    }
+    // If moderation call fails (non-ok), we fall through to generation,
+    // where the system prompt safety rules still apply.
+  } catch {
+    // Network/parse error on moderation: rely on prompt-level safety rules below.
+  }
+  timings.moderationMs = Date.now() - moderationStartedAt;
+
+  // --- Input quality validation (LOCAL ONLY, very permissive) ---
+  // Applies globally to every tool/category. We only block input that is
+  // clearly unusable or meaningless. Normal, imperfect input is accepted.
+  const VAGUE_MESSAGE =
+    "Pentru a genera un rezultat bun, avem nevoie de mai multe detalii. Te rugăm să completezi răspunsurile mai clar și mai specific.";
+
+  // Exact meaningless/generic answers (after trimming + lowercasing).
+  // These are bare keywords with no useful context, or filler.
+  const GENERIC_ANSWERS = new Set([
+    "nu stiu",
+    "nu știu",
+    "ceva",
+    "orice",
+    "nimic",
+    "test",
+    "asd",
+    "asdf",
+    "qwerty",
+    "curs",
+    "curs online",
+    "produs",
+    "serviciu",
+    "afacere",
+    "n/a",
+    "na",
+    "-",
+    ".",
+    "..",
+    "...",
+  ]);
+
+  // A field is "usable" if it is NOT an exact generic answer and gives at least
+  // a little context (2+ words, OR a single word of 4+ characters).
+  const isFieldUsable = (field) => {
+    const normalized = String(userInput[field] ?? "")
+      .trim()
+      .toLowerCase();
+    if (!normalized) return false;
+    if (GENERIC_ANSWERS.has(normalized)) return false;
+    const wordCount = normalized.split(/\s+/).filter(Boolean).length;
+    if (wordCount >= 2) return true; // "curs despre antreprenoriat" etc.
+    return normalized.length >= 4; // single meaningful word
+  };
+
+  // Reject only when NONE of the required fields are usable.
+  const hasUsableInput = (tool.requiredFields || []).some(isFieldUsable);
+  if (!hasUsableInput) {
+    res.status(200).json({ success: false, message: VAGUE_MESSAGE });
+    return;
+  }
+
+  // --- Build the final input and extract uploaded document text (if any) ---
+  // The uploaded file is optional. When present we extract its text on the
+  // server and place it in `continutFisier` so the model receives the actual
+  // content, never the raw file. We do not store the document.
+  const finalInput = { ...userInput };
+  // Whether the request included a file attempt (multipart buffer OR JSON URL).
+  const hadFileUpload = !!uploadedFile || !!userInput.fisierMaterial;
+
+  if (uploadedFile) {
+    // Primary flow: file uploaded directly via multipart/form-data.
+    try {
+      finalInput.continutFisier = await extractTextFromBuffer(
+        uploadedFile.buffer,
+        uploadedFile,
+      );
+    } catch (error) {
+      console.log("[v0] File extraction error (multipart):", error?.message);
+      finalInput.continutFisier = "";
+      finalInput.eroareFisier = error?.message || FILE_UNREADABLE_MESSAGE;
+    }
+  } else if (userInput.fisierMaterial) {
+    // Backward-compatibility: `fisierMaterial` provided as a public URL string.
+    try {
+      finalInput.continutFisier = await extractTextFromUrl(
+        userInput.fisierMaterial,
+      );
+    } catch (error) {
+      console.log("[v0] File extraction error (url):", error?.message);
+      finalInput.continutFisier = "";
+      finalInput.eroareFisier = error?.message || FILE_UNREADABLE_MESSAGE;
+    }
+  }
+
+  // If a file was provided but could not be read, and the user did not paste any
+  // manual text alternative, return a clear message instead of a weak result.
+  if (hadFileUpload && finalInput.eroareFisier) {
+    const manualTextFields = (tool.requiresAnyOf || []).filter(
+      (field) => field !== "fisierMaterial",
+    );
+    const hasManualText = manualTextFields.some((field) => {
+      const value = finalInput[field];
+      return (
+        value !== undefined && value !== null && String(value).trim() !== ""
+      );
+    });
+    if (!hasManualText) {
+      res.status(200).json({ success: false, message: finalInput.eroareFisier });
+      return;
+    }
+  }
+
+  // --- requiresAnyOf validation ---
+  // For tools that accept either manual text OR an uploaded file, ensure at
+  // least one of the listed fields has usable content (file text counts).
+  if (tool.requiresAnyOf?.length) {
+    const hasAtLeastOne = tool.requiresAnyOf.some((field) => {
+      // An uploaded/extracted file satisfies the `fisierMaterial` requirement.
+      if (field === "fisierMaterial") {
+        return (
+          !!finalInput.continutFisier &&
+          String(finalInput.continutFisier).trim() !== ""
+        );
+      }
+      const value = finalInput[field];
+      return (
+        value !== undefined && value !== null && String(value).trim() !== ""
+      );
+    });
+
+    if (!hasAtLeastOne) {
+      res.status(200).json({
+        success: false,
+        message: "Completează textul manual sau încarcă un fișier.",
+        requiredAnyOf: tool.requiresAnyOf,
+      });
+      return;
+    }
+  }
+
+  const promptBuildStartedAt = Date.now();
+  const toolInputSection =
+    typeof tool.buildUserPrompt === "function"
+      ? tool.buildUserPrompt(finalInput).trim()
+      : `Date introduse de utilizator:\n${formattedInput}`;
+
+  const improvementSection = improveMode
+    ? `
+
+Aceasta este o cerere de ÎMBUNĂTĂȚIRE a unui rezultat generat anterior cu același instrument și aceleași date.
+
+Rezultatul anterior:
+${previousResult || "(rezultatul anterior nu a fost furnizat)"}
+
+Modificarea cerută de utilizator:
+${improvementInstruction.trim()}
+
+Reguli pentru îmbunătățire:
+- Respectă întocmai cererea de modificare a utilizatorului.
+- Păstrează obiectivul original al instrumentului și al datelor introduse.
+- Pornește de la rezultatul anterior și îmbunătățește-l, nu o lua de la zero fără motiv.
+- Nu explica ce ai schimbat și nu descrie modificările făcute.
+- Returnează doar noul rezultat final îmbunătățit, în același format.`
+    : "";
+
+  const systemPrompt = tool.systemPrompt.trim();
+  const userPrompt = `${toolInputSection}${buildSharedUserPromptSuffix({
+    responseProfile: generationConfig.responseProfile,
+    improvementSection,
+  })}`;
+  timings.promptBuildMs = Date.now() - promptBuildStartedAt;
+
+  const systemPromptCharacterCount = systemPrompt.length;
+  const userPromptCharacterCount = userPrompt.length;
+
+  try {
+    const { text, model, error: modelError, openaiRequestMs, attemptedModels } =
+      await callToolModel({
+        systemPrompt,
+        userPrompt,
+        apiKey,
+        models: generationConfig.models,
+        maxOutputTokens: generationConfig.maxOutputTokens,
+        temperature: generationConfig.temperature,
+      });
+    timings.openaiRequestMs = openaiRequestMs || 0;
+
+    const result = typeof text === "string" ? text.trim() : "";
+    const outputCharacterCount = result.length;
+    const outputWordCount = countWords(result);
+
+    if (!result) {
+      timings.totalMs = Date.now() - requestStartedAt;
+      console.log("[PERF generate-tool]", {
+        toolSlug: toolId,
+        model: attemptedModels?.[attemptedModels.length - 1] || null,
+        responseProfile: generationConfig.responseProfile,
+        modelProfile: generationConfig.modelProfile,
+        inputCharacterCount,
+        systemPromptCharacterCount,
+        userPromptCharacterCount,
+        requestedMaxOutputTokens: generationConfig.maxOutputTokens,
+        outputCharacterCount: 0,
+        outputWordCount: 0,
+        attemptedModels,
+        ...timings,
+        success: false,
+      });
+      console.log(
+        "[v0] generate-tool failed to produce result. lastError:",
+        modelError || "unknown",
+      );
+      res.status(200).json({
+        success: false,
+        message: "Nu am putut genera răspunsul. Te rugăm să încerci din nou.",
+      });
+      return;
+    }
+
+    if (result.includes(UNSAFE_MESSAGE)) {
+      timings.totalMs = Date.now() - requestStartedAt;
+      res.status(200).json({ success: false, message: UNSAFE_MESSAGE });
+      return;
+    }
+
+    const workflowResolveStartedAt = Date.now();
+    const workflowFields = buildWorkflowRecommendationFields({
+      toolId: tool.toolId,
+      categorySlug: categorySlug || tool.categorySlug,
+      workflowContext,
+    });
+    timings.workflowResolveMs = Date.now() - workflowResolveStartedAt;
+
+    const responseFormatStartedAt = Date.now();
+    const responseBody = {
+      success: true,
+      toolId: tool.toolId,
+      result,
+      generationMeta: {
+        responseProfile: generationConfig.responseProfile,
+        modelProfile: generationConfig.modelProfile,
+        model,
+        maxOutputTokens: generationConfig.maxOutputTokens,
+      },
+      ...workflowFields,
+    };
+
+    timings.responseFormatMs = Date.now() - responseFormatStartedAt;
+    timings.totalMs = Date.now() - requestStartedAt;
+
+    console.log("[PERF generate-tool]", {
+      toolSlug: toolId,
+      model,
+      responseProfile: generationConfig.responseProfile,
+      modelProfile: generationConfig.modelProfile,
+      inputCharacterCount,
+      systemPromptCharacterCount,
+      userPromptCharacterCount,
+      requestedMaxOutputTokens: generationConfig.maxOutputTokens,
+      outputCharacterCount,
+      outputWordCount,
+      attemptedModels,
+      ...timings,
+      success: true,
+    });
+
+    res.status(200).json(responseBody);
+  } catch (error) {
+    timings.totalMs = Date.now() - requestStartedAt;
+    console.log("[PERF generate-tool]", {
+      toolSlug: toolId,
+      responseProfile: generationConfig.responseProfile,
+      inputCharacterCount,
+      ...timings,
+      success: false,
+      error: error?.message,
+    });
+    console.log("[v0] generate-tool unexpected error:", error?.message);
+    res.status(200).json({
+      success: false,
+      message: "Nu am putut genera răspunsul. Te rugăm să încerci din nou.",
+    });
+  }
+}

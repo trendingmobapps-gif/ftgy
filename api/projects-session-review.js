@@ -74,6 +74,8 @@ export default async function handler(req, res) {
       result: result.result,
       session: result.session,
       stepPending: Boolean(result.stepPending),
+      canFinalize: Boolean(result.canFinalize),
+      missingRequirements: result.missingRequirements || [],
       ...(result.view || {}),
     });
   } catch {

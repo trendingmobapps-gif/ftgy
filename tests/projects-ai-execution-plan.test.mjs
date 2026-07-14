@@ -451,7 +451,7 @@ describe("projects AI execution plan", () => {
       }),
     });
 
-    assert.equal(generated.source, "ai_generated");
+    assert.equal(generated.source, "openai");
     assert.equal(generated.plan.mode, "assessment");
     assert.doesNotMatch(JSON.stringify(generated.plan), /I go to school|childs/i);
   });

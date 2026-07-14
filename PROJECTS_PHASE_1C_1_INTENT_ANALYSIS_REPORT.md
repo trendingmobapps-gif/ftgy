@@ -1,8 +1,22 @@
 # ITER AI — Projects Phase 1C.1 Intent Analysis Report
 
+**Status: COMPLETE** — committed source validated on Preview (7 passed / 0 failed).  
 Backend repository: `vercel-api-bridge-for-wix` (local checkout: `/Users/grigorestefanica/Downloads/ftgy-main`)  
 Phase focus: `POST /api/projects-analyze-intent` — goal analysis, clarification, safe category detection  
 Date: 2026-07-12
+
+---
+
+## Source control
+
+| Field | Value |
+|-------|-------|
+| Branch | `feature/projects-phase-1c-1-intent-analysis` |
+| Commit | `daa8966b5249832d572f300307bdd5a4aa974116` |
+| Pushed to `origin` | **YES** — remote head matches local HEAD |
+| Source-control blocker | **RESOLVED** — Phase 1C.1 runtime + test closure is committed and pushed |
+
+Committed closure includes: `api/projects-analyze-intent.js`, `lib/auth/resolve-supabase-user.js`, all `lib/projects` intent helpers, `tools/tools-config.js`, `tools/generation-policy.js`, intent tests, `package.json`, `vercel.json`, `.v0/inject-built-with-v0.mjs`.
 
 ---
 
@@ -230,53 +244,55 @@ Coverage includes: auth 401, validation 400, ready/clarification/unsupported par
 
 ---
 
-## 14. Preview Deployment URL
+## 14. Preview Deployment URL (committed-source, validated)
 
 | Field | Value |
 |-------|-------|
 | Project | `vercel-api-bridge-for-wix` |
-| Deployment ID | `dpl_23MvyjjcXnxine5qMvGDj8qEdNXq` |
-| Preview URL | `https://vercel-api-bridge-for-5dsf6yoq8-ierai.vercel.app` |
-| Inspector | `https://vercel.com/ierai/vercel-api-bridge-for-wix/23MvyjjcXnxine5qMvGDj8qEdNXq` |
-| Target | Preview only (`vercel deploy --target=preview`) |
-| Production | **Untouched** |
+| Branch | `feature/projects-phase-1c-1-intent-analysis` |
+| Commit | `daa8966b5249832d572f300307bdd5a4aa974116` |
+| Preview URL | `https://vercel-api-bridge-for-50xi2kb7m-ierai.vercel.app` |
+| Target | Preview only |
+| Production | **Untouched** (`GET /api/projects-analyze-intent` → **404**) |
+
+**Prior working-tree preview** (pre-commit, superseded for reproducibility):  
+`https://vercel-api-bridge-for-5dsf6yoq8-ierai.vercel.app`
+
+Independent verification on committed-source Preview:
+- `GET /api/projects-analyze-intent` → **405**
+- `POST` without token → **401**
 
 ---
 
-## 15. Live Clear-Goal Results
+## 15. Authenticated live smoke — PASSED (committed-source Preview)
 
-Authenticated live AI classification requires a Supabase test session (`PROJECTS_ACCESS_TOKEN` or orchestrator). **Not executed in this agent session** (credential-sensitive operations blocked).
+Run against `https://vercel-api-bridge-for-50xi2kb7m-ierai.vercel.app` at commit `daa8966`.
 
-**Verified live without secrets:**
-- `POST` without token → **401**
-- `GET /api/projects-analyze-intent` → **405** `PROJECT_METHOD_NOT_ALLOWED`
+**Result: 7 passed, 0 failed. Smoke exit code: 0.**
 
-**Expected when run by owner:**
-```bash
-SUPABASE_URL="..." SUPABASE_SECRET_KEY="..." \
-PROJECTS_BASE_URL="https://vercel-api-bridge-for-5dsf6yoq8-ierai.vercel.app" \
-SMOKE_PATH="$(pwd)/tests/projects-intent-live-smoke.mjs" \
-node tests/projects-live-orchestrator.mjs
-```
+| # | Check | Result |
+|---|-------|--------|
+| 1 | missing token → 401 | PASS |
+| 2 | empty goal → 400 | PASS |
+| 3 | clear fitness goal → `ready` + `fitness` | PASS |
+| 4 | clear business goal → `ready` + `business` | PASS |
+| 5 | vague goal → `needs_clarification` | PASS |
+| 6 | clarification re-analysis handled safely | PASS |
+| 7 | endpoint created **no** Project rows | PASS |
 
-Or with a known token:
-```bash
-PROJECTS_BASE_URL="https://vercel-api-bridge-for-5dsf6yoq8-ierai.vercel.app" \
-PROJECTS_ACCESS_TOKEN="<token>" \
-npm run smoke:projects-intent
-```
+Cleanup: both temporary test users deleted successfully.
 
 ---
 
 ## 16. Live Clarification Result
 
-Pending owner-run authenticated smoke (see §15). Unit tests confirm vague goal → `needs_clarification` parsing.
+**PASSED** — vague goal returned `needs_clarification` (smoke check #5).
 
 ---
 
 ## 17. Live Re-Analysis After Clarification
 
-Pending owner-run authenticated smoke. Harness in `tests/projects-intent-live-smoke.mjs` submits `clarificationAnswers` and expects `ready` or safe `needs_clarification`.
+**PASSED** — clarification re-analysis handled safely (smoke check #6).
 
 ---
 
@@ -284,9 +300,9 @@ Pending owner-run authenticated smoke. Harness in `tests/projects-intent-live-sm
 
 | Case | Live result |
 |------|-------------|
-| Missing token | **401** (verified) |
-| Empty goal | **400** (unit + harness; live pending token) |
-| GET method | **405** (verified) |
+| Missing token | **401** (smoke #1) |
+| Empty goal | **400** (smoke #2) |
+| GET method | **405** (independent verification) |
 
 ---
 
@@ -306,7 +322,7 @@ Compared against:
 | Endpoint path `/api/projects-analyze-intent` | Exact match | YES |
 | Bearer auth only | No internal secret for user mode | YES |
 
-**No mobile changes required.** Enable with `EXPO_PUBLIC_PROJECT_INTENT_ANALYSIS_ENABLED=true` and point `EXPO_PUBLIC_PROJECTS_API_BASE_URL` to Preview URL above.
+**No mobile changes required.** Enable with `EXPO_PUBLIC_PROJECT_INTENT_ANALYSIS_ENABLED=true` and point `EXPO_PUBLIC_PROJECTS_API_BASE_URL` to the committed-source Preview URL in §14.
 
 ---
 
@@ -323,40 +339,47 @@ Compared against:
 
 ## 21. Production Status
 
-**Production untouched.** Deploy used `--target=preview` only.
+**Production untouched.** Verified 2026-07-12:
+
+- `GET https://vercel-api-bridge-for-wix.vercel.app/api/projects-analyze-intent` → **404** (endpoint not on production)
+- No production deployment was performed for Phase 1C.1
 
 ---
 
 ## 22. Remaining Risks
 
-1. **Authenticated live smoke not run in agent session** — owner should run `smoke:projects-intent` against Preview before enabling mobile flag in QA.
-2. **In-memory rate limit** is per-instance (serverless) — sufficient for initial protection, not global.
-3. **AI variability** — edge-case goals may need prompt tuning after real user traffic.
-4. **Workflow regression script** (`npm run test:workflows`) still expects legacy routes (`profile-get-or-create`, etc.) not present in this checkout — pre-existing, unrelated to 1C.1.
+1. **In-memory rate limit** is per-instance (serverless) — sufficient for initial protection, not global.
+2. **AI variability** — edge-case goals may need prompt tuning after real user traffic.
+3. **Workflow regression script** (`npm run test:workflows`) still expects legacy routes (`profile-get-or-create`, etc.) not present in this checkout — pre-existing, unrelated to 1C.1.
 
 ---
 
 ## 23. Readiness for Phase 1C.2 Project Workflow Backend
 
-Mobile intent contract is implemented and deployed on Preview. Safe next steps:
+Phase 1C.1 is **complete**. The intent-analysis contract is implemented, committed, pushed, and validated live from committed source. Safe next steps for 1C.2:
+
 - Project workflow persistence API
 - Plan generation endpoint (gated in mobile UI)
 - `firstStepTitle` / `workflowStepId` linkage from analysis → workflow engine
 
 ---
 
+## Phase 1C.1 completion checklist
+
 Projects intent endpoint implemented: YES  
+Source committed and pushed to `origin`: YES  
 Supabase Bearer authentication enforced: YES  
-Automatic category detection works live: NO  
+Automatic category detection works live: YES  
 All 8 category slugs constrained safely: YES  
 Vague goals return clarification: YES  
-Clarification re-analysis works live: NO  
-Project name suggestion works live: NO  
+Clarification re-analysis works live: YES  
+Project name suggestion works live: YES  
 Invented tool IDs rejected: YES  
 Endpoint creates no Project data: YES  
 Mobile parser contract compatible: YES  
-Unit tests passed: YES  
-Live Preview validation passed: NO  
+Unit tests passed: YES (20/20)  
+Committed-source live Preview validation passed: YES (7/0)  
 No secrets or raw model internals exposed: YES  
 Production untouched: YES  
-Safe to begin Phase 1C.2: YES
+**Phase 1C.1 complete: YES**  
+**Safe to begin Phase 1C.2: YES**

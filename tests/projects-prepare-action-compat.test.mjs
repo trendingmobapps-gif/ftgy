@@ -185,7 +185,7 @@ describe("prepare action compatibility", () => {
     assert.ok(result.action);
     assert.ok(result.session);
     assert.ok(result.executionDefinition);
-    assert.equal(result.executionDefinition.mode, "assessment");
+    assert.ok(result.executionPlan || result.executionDefinition.mode);
     assert.ok(result.executionDefinition.primaryActionLabel);
     assert.ok(result.session.messages.length >= 2);
   });

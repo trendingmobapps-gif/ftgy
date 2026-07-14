@@ -1,0 +1,1739 @@
+{
+  "schemaVersion": 1,
+  "version": 1,
+  "generatedAt": "2026-07-11T15:17:30.912Z",
+  "sourceHash": "11a750a21c35f384ce1aa215f32599ced22eff66ce7d619f4fbfb4068c1c1ae4",
+  "workflowCount": 22,
+  "workflows": [
+    {
+      "id": "business-start-a-business",
+      "categorySlug": "business",
+      "goalTitle": "Pornește o afacere",
+      "goalDescription": "De la idee structurată la poziționare și prima pagină de vânzare.",
+      "entryNodeId": "start-plan",
+      "tags": [
+        "start",
+        "founder"
+      ],
+      "status": "active",
+      "priority": 2,
+      "nodes": [
+        {
+          "id": "start-plan",
+          "type": "tool",
+          "toolId": "plan-de-afaceri",
+          "toolSlug": "plan-de-afaceri",
+          "title": "Plan de Afaceri",
+          "userFacingAction": "Structurează ideea de afacere",
+          "reason": "Ai nevoie de claritate asupra pieței, modelului și pașilor de lansare.",
+          "userOutcome": "Obții un plan coerent pe care îl poți valida sau prezenta.",
+          "estimatedMinutes": 12
+        },
+        {
+          "id": "start-brand-name",
+          "type": "tool",
+          "toolId": "generator-nume-brand",
+          "toolSlug": "generator-nume-brand",
+          "title": "Generator Nume Brand",
+          "userFacingAction": "Alege un nume memorabil",
+          "reason": "Numele susține prima impresie și comunicarea ulterioară.",
+          "userOutcome": "Ai variante de nume potrivite nișei tale.",
+          "estimatedMinutes": 5,
+          "optional": true
+        },
+        {
+          "id": "start-usp",
+          "type": "tool",
+          "toolId": "generator-usp",
+          "toolSlug": "generator-usp",
+          "title": "Generator USP",
+          "userFacingAction": "Definește de ce te-ar alege un client",
+          "reason": "Fără diferențiere clară, mesajul rămâne generic.",
+          "userOutcome": "Știi exact ce te face diferit în piață.",
+          "estimatedMinutes": 6
+        },
+        {
+          "id": "start-landing",
+          "type": "tool",
+          "toolId": "generator-landing-page",
+          "toolSlug": "generator-landing-page",
+          "title": "Generator Landing Page",
+          "userFacingAction": "Transformă planul într-o pagină de vânzare",
+          "reason": "Pagina este primul punct de conversie pentru ideea ta.",
+          "userOutcome": "Ai structura și textele pentru o pagină clară.",
+          "estimatedMinutes": 10
+        },
+        {
+          "id": "start-complete",
+          "type": "completion",
+          "title": "Bază de lansare pregătită",
+          "userFacingAction": "Revizuiește și publică",
+          "reason": "Ai minimumul strategic pentru a merge mai departe.",
+          "userOutcome": "Poți lansa sau testa oferta cu încredere."
+        }
+      ],
+      "edges": [
+        {
+          "from": "start-plan",
+          "to": "start-brand-name",
+          "title": "Identitate de brand",
+          "reason": "După plan, numele ancorează poziționarea.",
+          "userOutcome": "Brandul devine recognoscibil."
+        },
+        {
+          "from": "start-brand-name",
+          "to": "start-usp",
+          "title": "Diferențiere",
+          "reason": "USP-ul traduce planul într-un mesaj concret.",
+          "userOutcome": "Clienții înțeleg rapid valoarea ta."
+        },
+        {
+          "from": "start-usp",
+          "to": "start-landing",
+          "title": "Prima pagină de vânzare",
+          "reason": "Landing page-ul aplică mesajul într-un format conversibil.",
+          "userOutcome": "Poți colecta lead-uri sau vânzări."
+        },
+        {
+          "from": "start-landing",
+          "to": "start-complete",
+          "title": "Finalizare",
+          "reason": "Ai parcurs etapele esențiale de la idee la pagină.",
+          "userOutcome": "Lansarea poate începe."
+        }
+      ]
+    },
+    {
+      "id": "business-launch-a-product",
+      "categorySlug": "business",
+      "goalTitle": "Lansează un produs",
+      "goalDescription": "Plan de lansare, mesaj și canale de promovare pentru debut.",
+      "entryNodeId": "launch-plan",
+      "tags": [
+        "launch",
+        "product"
+      ],
+      "status": "active",
+      "priority": 2,
+      "nodes": [
+        {
+          "id": "launch-plan",
+          "type": "tool",
+          "toolId": "plan-lansare-produs",
+          "toolSlug": "plan-lansare-produs",
+          "title": "Plan Lansare Produs",
+          "userFacingAction": "Planifică lansarea pas cu pas",
+          "reason": "Lansarea fără plan creează haos și risipă de buget.",
+          "userOutcome": "Ai timeline, canale și priorități clare.",
+          "estimatedMinutes": 12
+        },
+        {
+          "id": "launch-strategy",
+          "type": "tool",
+          "toolId": "strategie-marketing",
+          "toolSlug": "strategie-marketing",
+          "title": "Strategie Marketing",
+          "userFacingAction": "Aliniază mesajul și canalele",
+          "reason": "Strategia leagă planul de execuția zilnică.",
+          "userOutcome": "Știi ce comunici, unde și cui.",
+          "estimatedMinutes": 10
+        },
+        {
+          "id": "launch-ads",
+          "type": "tool",
+          "toolId": "generator-reclame-meta",
+          "toolSlug": "generator-reclame-meta",
+          "title": "Generator Reclame Meta",
+          "userFacingAction": "Pregătește reclame pentru lansare",
+          "reason": "Reclamele aduc vizibilitate rapidă la debut.",
+          "userOutcome": "Ai variante de reclame gata de testat.",
+          "estimatedMinutes": 8
+        },
+        {
+          "id": "launch-email",
+          "type": "tool",
+          "toolId": "generator-email-marketing",
+          "toolSlug": "generator-email-marketing",
+          "title": "Generator Email Marketing",
+          "userFacingAction": "Creează secvența de email",
+          "reason": "Emailul susține interesul după prima expunere.",
+          "userOutcome": "Ai mesaje pentru nurturing post-lansare.",
+          "estimatedMinutes": 8,
+          "optional": true
+        },
+        {
+          "id": "launch-complete",
+          "type": "completion",
+          "title": "Lansare structurată",
+          "userFacingAction": "Execută pe canale",
+          "reason": "Planul este tradus în acțiuni concrete.",
+          "userOutcome": "Poți lansa cu mesaj și canale aliniate."
+        }
+      ],
+      "edges": [
+        {
+          "from": "launch-plan",
+          "to": "launch-strategy",
+          "title": "Strategie de comunicare",
+          "reason": "După plan, strategia definește mesajul și audiența.",
+          "userOutcome": "Lansarea are direcție clară."
+        },
+        {
+          "from": "launch-strategy",
+          "to": "launch-ads",
+          "title": "Vizibilitate plătită",
+          "reason": "Reclamele accelerează reach-ul la lansare.",
+          "userOutcome": "Produsul ajunge la public rapid."
+        },
+        {
+          "from": "launch-ads",
+          "to": "launch-email",
+          "title": "Follow-up prin email",
+          "reason": "Emailul convertește interesul inițial.",
+          "userOutcome": "Lead-urile sunt cultivate după lansare."
+        },
+        {
+          "from": "launch-email",
+          "to": "launch-complete",
+          "title": "Gata de lansare",
+          "reason": "Canalele principale sunt pregătite.",
+          "userOutcome": "Poți lansa produsul."
+        }
+      ]
+    },
+    {
+      "id": "business-attract-more-clients",
+      "categorySlug": "business",
+      "goalTitle": "Atrage mai mulți clienți",
+      "goalDescription": "Strategie de lead-uri, ofertă clară și pagină de conversie.",
+      "entryNodeId": "clients-leads",
+      "tags": [
+        "growth",
+        "leads"
+      ],
+      "status": "active",
+      "priority": 1,
+      "nodes": [
+        {
+          "id": "clients-leads",
+          "type": "tool",
+          "toolId": "strategie-lead-generation",
+          "toolSlug": "strategie-lead-generation",
+          "title": "Strategie Lead Generation",
+          "userFacingAction": "Definește cum atragi lead-uri",
+          "reason": "Fără flux predictibil de lead-uri, creșterea e instabilă.",
+          "userOutcome": "Ai canale și tactici pentru atragere constantă.",
+          "estimatedMinutes": 10
+        },
+        {
+          "id": "clients-offer",
+          "type": "tool",
+          "toolId": "generator-oferta-comerciala",
+          "toolSlug": "generator-oferta-comerciala",
+          "title": "Generator Ofertă Comercială",
+          "userFacingAction": "Construiește oferta care convinge",
+          "reason": "Oferta clară transformă interesul în acțiune.",
+          "userOutcome": "Ai o ofertă structurată pentru clienți.",
+          "estimatedMinutes": 8
+        },
+        {
+          "id": "clients-landing",
+          "type": "tool",
+          "toolId": "generator-landing-page",
+          "toolSlug": "generator-landing-page",
+          "title": "Generator Landing Page",
+          "userFacingAction": "Creează pagina de captare",
+          "reason": "Pagina transformă traficul în lead-uri.",
+          "userOutcome": "Ai o pagină orientată spre conversie.",
+          "estimatedMinutes": 10
+        },
+        {
+          "id": "clients-complete",
+          "type": "completion",
+          "title": "Sistem de atragere clienți",
+          "userFacingAction": "Activează canalele",
+          "reason": "Strategia, oferta și pagina sunt aliniate.",
+          "userOutcome": "Poți genera lead-uri în mod repetabil."
+        }
+      ],
+      "edges": [
+        {
+          "from": "clients-leads",
+          "to": "clients-offer",
+          "title": "Ofertă convingătoare",
+          "reason": "Lead-urile au nevoie de o propunere clară.",
+          "userOutcome": "Conversia devine mai probabilă."
+        },
+        {
+          "from": "clients-offer",
+          "to": "clients-landing",
+          "title": "Pagină de conversie",
+          "reason": "Oferta are nevoie de un loc unde se închide acțiunea.",
+          "userOutcome": "Traficul se transformă în contacte."
+        },
+        {
+          "from": "clients-landing",
+          "to": "clients-complete",
+          "title": "Sistem complet",
+          "reason": "Ai lanțul lead → ofertă → pagină.",
+          "userOutcome": "Poți scala atragerea de clienți."
+        }
+      ]
+    },
+    {
+      "id": "business-create-commercial-offer",
+      "categorySlug": "business",
+      "goalTitle": "Creează o ofertă comercială",
+      "goalDescription": "Ofertă, preț și îndemn la acțiune pentru vânzare.",
+      "entryNodeId": "offer-build",
+      "tags": [
+        "sales",
+        "offer"
+      ],
+      "status": "active",
+      "priority": 1,
+      "nodes": [
+        {
+          "id": "offer-build",
+          "type": "tool",
+          "toolId": "generator-oferta-comerciala",
+          "toolSlug": "generator-oferta-comerciala",
+          "title": "Generator Ofertă Comercială",
+          "userFacingAction": "Redactează oferta pentru client",
+          "reason": "Oferta bine structurată reduce ezitarea la cumpărare.",
+          "userOutcome": "Ai un document de ofertă clar și convingător.",
+          "estimatedMinutes": 8
+        },
+        {
+          "id": "offer-pricing",
+          "type": "tool",
+          "toolId": "generator-pret-serviciu",
+          "toolSlug": "generator-pret-serviciu",
+          "title": "Generator Preț Serviciu",
+          "userFacingAction": "Stabilește un preț defensibil",
+          "reason": "Prețul trebuie să reflecte valoarea și piața.",
+          "userOutcome": "Știi ce să ceri și de ce.",
+          "estimatedMinutes": 6
+        },
+        {
+          "id": "offer-cta",
+          "type": "tool",
+          "toolId": "generator-cta",
+          "toolSlug": "generator-cta",
+          "title": "Generator CTA",
+          "userFacingAction": "Formulează îndemnul la acțiune",
+          "reason": "CTA-ul determină pasul următor al clientului.",
+          "userOutcome": "Clientul știe exact ce să facă după ofertă.",
+          "estimatedMinutes": 4
+        },
+        {
+          "id": "offer-complete",
+          "type": "completion",
+          "title": "Ofertă gata de trimis",
+          "userFacingAction": "Trimite clientului",
+          "reason": "Oferta include valoare, preț și acțiune.",
+          "userOutcome": "Poți închide vânzarea mai rapid."
+        }
+      ],
+      "edges": [
+        {
+          "from": "offer-build",
+          "to": "offer-pricing",
+          "title": "Stabilire preț",
+          "reason": "După valoare, prețul trebuie ancorat.",
+          "userOutcome": "Oferta devine comercială."
+        },
+        {
+          "from": "offer-pricing",
+          "to": "offer-cta",
+          "title": "Îndemn la acțiune",
+          "reason": "Clientul are nevoie de un pas clar următor.",
+          "userOutcome": "Oferta este ușor de acceptat."
+        },
+        {
+          "from": "offer-cta",
+          "to": "offer-complete",
+          "title": "Pachet complet",
+          "reason": "Toate elementele vânzării sunt pregătite.",
+          "userOutcome": "Oferta poate fi trimisă."
+        }
+      ]
+    },
+    {
+      "id": "business-define-pricing",
+      "categorySlug": "business",
+      "goalTitle": "Definește prețul",
+      "goalDescription": "Înțelege piața și stabilește un preț corect pentru serviciu.",
+      "entryNodeId": "pricing-analysis",
+      "tags": [
+        "pricing"
+      ],
+      "status": "active",
+      "priority": 1,
+      "nodes": [
+        {
+          "id": "pricing-analysis",
+          "type": "tool",
+          "toolId": "analiza-concurenta",
+          "toolSlug": "analiza-concurenta",
+          "title": "Analiză Concurență",
+          "userFacingAction": "Înțelege contextul pieței",
+          "reason": "Prețul fără context de piață poate fi prea mic sau prea mare.",
+          "userOutcome": "Știi cum se poziționează concurența.",
+          "estimatedMinutes": 10
+        },
+        {
+          "id": "pricing-set",
+          "type": "tool",
+          "toolId": "generator-pret-serviciu",
+          "toolSlug": "generator-pret-serviciu",
+          "title": "Generator Preț Serviciu",
+          "userFacingAction": "Calculează prețul potrivit",
+          "reason": "Analiza trebuie translată într-un preț concret.",
+          "userOutcome": "Ai un preț argumentat pentru ofertă.",
+          "estimatedMinutes": 6
+        },
+        {
+          "id": "pricing-complete",
+          "type": "completion",
+          "title": "Preț definit",
+          "userFacingAction": "Folosește prețul în ofertă",
+          "reason": "Decizia de preț este fundamentată.",
+          "userOutcome": "Poți vinde cu încredere."
+        }
+      ],
+      "edges": [
+        {
+          "from": "pricing-analysis",
+          "to": "pricing-set",
+          "title": "Stabilire preț",
+          "reason": "După analiză, prețul se calculează pe baza pieței.",
+          "userOutcome": "Prețul este aliniat la realitate."
+        },
+        {
+          "from": "pricing-set",
+          "to": "pricing-complete",
+          "title": "Decizie finală",
+          "reason": "Ai fundament pentru preț.",
+          "userOutcome": "Poți comunica prețul clientului."
+        }
+      ]
+    },
+    {
+      "id": "business-build-a-brand",
+      "categorySlug": "business",
+      "goalTitle": "Construiește un brand",
+      "goalDescription": "Nume, diferențiere și descrieri coerente pentru identitate.",
+      "entryNodeId": "brand-name",
+      "tags": [
+        "brand"
+      ],
+      "status": "active",
+      "priority": 1,
+      "nodes": [
+        {
+          "id": "brand-name",
+          "type": "tool",
+          "toolId": "generator-nume-brand",
+          "toolSlug": "generator-nume-brand",
+          "title": "Generator Nume Brand",
+          "userFacingAction": "Găsește un nume memorabil",
+          "reason": "Identitatea începe cu un nume recognoscibil.",
+          "userOutcome": "Ai opțiuni de nume potrivite afacerii.",
+          "estimatedMinutes": 5
+        },
+        {
+          "id": "brand-usp",
+          "type": "tool",
+          "toolId": "generator-usp",
+          "toolSlug": "generator-usp",
+          "title": "Generator USP",
+          "userFacingAction": "Definește clar diferențiatorul",
+          "reason": "Brandul puternic spune de ce ești alegerea logică.",
+          "userOutcome": "Mesajul brandului devine distinct.",
+          "estimatedMinutes": 6
+        },
+        {
+          "id": "brand-descriptions",
+          "type": "tool",
+          "toolId": "generator-descrieri-produse",
+          "toolSlug": "generator-descrieri-produse",
+          "title": "Generator Descrieri Produse",
+          "userFacingAction": "Scrie descrieri aliniate brandului",
+          "reason": "Identitatea trebuie aplicată în vânzare.",
+          "userOutcome": "Produsele sună coerent cu brandul.",
+          "estimatedMinutes": 8
+        },
+        {
+          "id": "brand-complete",
+          "type": "completion",
+          "title": "Identitate de brand coerentă",
+          "userFacingAction": "Folosește mesajele în canale",
+          "reason": "Nume, USP și descrieri sunt aliniate.",
+          "userOutcome": "Comunicarea devine consistentă."
+        }
+      ],
+      "edges": [
+        {
+          "from": "brand-name",
+          "to": "brand-usp",
+          "title": "Diferențiere de brand",
+          "reason": "După nume, USP-ul definește promisiunea.",
+          "userOutcome": "Brandul are personalitate clară."
+        },
+        {
+          "from": "brand-usp",
+          "to": "brand-descriptions",
+          "title": "Aplicare în vânzare",
+          "reason": "Descrierile aplică identitatea la produse.",
+          "userOutcome": "Mesajul e uniform peste tot."
+        },
+        {
+          "from": "brand-descriptions",
+          "to": "brand-complete",
+          "title": "Brand gata",
+          "reason": "Identitatea e completă la nivel de mesaj.",
+          "userOutcome": "Poți comunica consistent."
+        }
+      ]
+    },
+    {
+      "id": "business-create-marketing-system",
+      "categorySlug": "business",
+      "goalTitle": "Creează un sistem de marketing",
+      "goalDescription": "Strategie, calendar și canale recurente integrate.",
+      "entryNodeId": "marketing-strategy",
+      "tags": [
+        "marketing",
+        "system"
+      ],
+      "status": "active",
+      "priority": 1,
+      "nodes": [
+        {
+          "id": "marketing-strategy",
+          "type": "tool",
+          "toolId": "strategie-marketing",
+          "toolSlug": "strategie-marketing",
+          "title": "Strategie Marketing",
+          "userFacingAction": "Definește direcția de marketing",
+          "reason": "Fără strategie, acțiunile sunt reactive și inconsistente.",
+          "userOutcome": "Ai o direcție clară pentru toate canalele.",
+          "estimatedMinutes": 10
+        },
+        {
+          "id": "marketing-calendar",
+          "type": "tool",
+          "toolId": "calendar-marketing-lunar",
+          "toolSlug": "calendar-marketing-lunar",
+          "title": "Calendar Marketing Lunar",
+          "userFacingAction": "Planifică acțiunile pe o lună",
+          "reason": "Calendarul transformă strategia în execuție.",
+          "userOutcome": "Știi ce publici și când.",
+          "estimatedMinutes": 8
+        },
+        {
+          "id": "marketing-email",
+          "type": "tool",
+          "toolId": "generator-email-marketing",
+          "toolSlug": "generator-email-marketing",
+          "title": "Generator Email Marketing",
+          "userFacingAction": "Pregătește emailurile recurente",
+          "reason": "Emailul e canalul de nurturing pe termen lung.",
+          "userOutcome": "Ai mesaje pentru relația cu audiența.",
+          "estimatedMinutes": 8
+        },
+        {
+          "id": "marketing-ads",
+          "type": "tool",
+          "toolId": "generator-reclame-meta",
+          "toolSlug": "generator-reclame-meta",
+          "title": "Generator Reclame Meta",
+          "userFacingAction": "Generează reclame pentru trafic",
+          "reason": "Reclamele aduc audiență nouă în sistem.",
+          "userOutcome": "Ai variante de reclame pentru testare.",
+          "estimatedMinutes": 8,
+          "optional": true
+        },
+        {
+          "id": "marketing-complete",
+          "type": "completion",
+          "title": "Sistem de marketing activ",
+          "userFacingAction": "Execută calendarul",
+          "reason": "Strategia e operationalizată pe canale.",
+          "userOutcome": "Marketingul rulează predictibil."
+        }
+      ],
+      "edges": [
+        {
+          "from": "marketing-strategy",
+          "to": "marketing-calendar",
+          "title": "Planificare lunară",
+          "reason": "Strategia devine acțiuni concrete pe calendar.",
+          "userOutcome": "Execuția e organizată."
+        },
+        {
+          "from": "marketing-calendar",
+          "to": "marketing-email",
+          "title": "Canal de email",
+          "reason": "Emailul susține relația cu audiența.",
+          "userOutcome": "Nurturing-ul e pregătit."
+        },
+        {
+          "from": "marketing-email",
+          "to": "marketing-ads",
+          "title": "Trafic plătit",
+          "reason": "Reclamele completează reach-ul organic.",
+          "userOutcome": "Sistemul atrage audiență nouă."
+        },
+        {
+          "from": "marketing-ads",
+          "to": "marketing-complete",
+          "title": "Sistem complet",
+          "reason": "Canalele principale sunt conectate.",
+          "userOutcome": "Marketingul funcționează ca sistem."
+        }
+      ]
+    },
+    {
+      "id": "business-automate-processes",
+      "categorySlug": "business",
+      "goalTitle": "Automatizează procesele",
+      "goalDescription": "Identifică și prioritizează automatizări cu impact real.",
+      "entryNodeId": "auto-processes",
+      "tags": [
+        "automation",
+        "operations"
+      ],
+      "status": "active",
+      "nodes": [
+        {
+          "id": "auto-processes",
+          "type": "tool",
+          "toolId": "automatizare-procese-business",
+          "toolSlug": "automatizare-procese-business",
+          "title": "Automatizare Procese",
+          "userFacingAction": "Mapează ce poți automatiza",
+          "reason": "Procesele repetitive consumă timp ce ar putea merge la vânzări.",
+          "userOutcome": "Știi ce fluxuri merită automatizate.",
+          "estimatedMinutes": 10
+        },
+        {
+          "id": "auto-checkpoint",
+          "type": "checkpoint",
+          "title": "Prioritizează automatizările",
+          "userFacingAction": "Alege ce implementezi primul",
+          "reason": "Nu toate procesele au același impact.",
+          "userOutcome": "Focus pe automatizări cu ROI clar.",
+          "estimatedMinutes": 3
+        },
+        {
+          "id": "auto-complete",
+          "type": "completion",
+          "title": "Plan de automatizare",
+          "userFacingAction": "Implementează prioritățile",
+          "reason": "Ai o listă clară de acțiuni.",
+          "userOutcome": "Operațiunile devin mai eficiente."
+        }
+      ],
+      "edges": [
+        {
+          "from": "auto-processes",
+          "to": "auto-checkpoint",
+          "title": "Prioritizare",
+          "reason": "Lista de procese trebuie filtrată după impact.",
+          "userOutcome": "Știi de unde începi."
+        },
+        {
+          "from": "auto-checkpoint",
+          "to": "auto-complete",
+          "title": "Plan final",
+          "reason": "Prioritățile sunt setate.",
+          "userOutcome": "Poți implementa automatizările."
+        }
+      ]
+    },
+    {
+      "id": "studii-learn-a-lesson",
+      "categorySlug": "studii",
+      "goalTitle": "Învață o lecție",
+      "goalDescription": "Explică, rezumă, fixează cu flashcards și verifică cu quiz.",
+      "entryNodeId": "lesson-explain",
+      "tags": [
+        "learning",
+        "lesson"
+      ],
+      "status": "active",
+      "priority": 1,
+      "nodes": [
+        {
+          "id": "lesson-explain",
+          "type": "tool",
+          "toolId": "explica-pe-intelesul-meu",
+          "toolSlug": "explica-pe-intelesul-meu",
+          "title": "Explică pe înțelesul meu",
+          "userFacingAction": "Înțelege lecția pas cu pas",
+          "reason": "Înțelegerea vine înainte de memorare.",
+          "userOutcome": "Conceptele cheie îți sunt clare.",
+          "estimatedMinutes": 8
+        },
+        {
+          "id": "lesson-summary",
+          "type": "tool",
+          "toolId": "rezuma-lectia",
+          "toolSlug": "rezuma-lectia",
+          "title": "Rezumă lecția",
+          "userFacingAction": "Condensează esențialul",
+          "reason": "Rezumatul fixează ideile principale.",
+          "userOutcome": "Ai o sinteză scurtă pentru recapitulare.",
+          "estimatedMinutes": 5
+        },
+        {
+          "id": "lesson-flashcards",
+          "type": "tool",
+          "toolId": "flashcards-automate",
+          "toolSlug": "flashcards-automate",
+          "title": "Flashcards automate",
+          "userFacingAction": "Creează carduri de memorare",
+          "reason": "Repetiția spațiată fixează informația.",
+          "userOutcome": "Ai flashcards gata de exersat.",
+          "estimatedMinutes": 6
+        },
+        {
+          "id": "lesson-quiz",
+          "type": "tool",
+          "toolId": "quiz-generator",
+          "toolSlug": "quiz-generator",
+          "title": "Quiz Generator",
+          "userFacingAction": "Verifică ce ai reținut",
+          "reason": "Quiz-ul arată golurile înainte de examen.",
+          "userOutcome": "Știi ce mai trebuie revizuit.",
+          "estimatedMinutes": 6
+        },
+        {
+          "id": "lesson-complete",
+          "type": "completion",
+          "title": "Lecție asimilată",
+          "userFacingAction": "Repetă flashcards și quiz",
+          "reason": "Ai parcurs ciclul complet de învățare.",
+          "userOutcome": "Materia e fixată pentru examen."
+        }
+      ],
+      "edges": [
+        {
+          "from": "lesson-explain",
+          "to": "lesson-summary",
+          "title": "Sinteză",
+          "reason": "După explicație, rezumatul condensează esențialul.",
+          "userOutcome": "Ideile principale sunt structurate."
+        },
+        {
+          "from": "lesson-summary",
+          "to": "lesson-flashcards",
+          "title": "Memorare activă",
+          "reason": "Flashcards transformă rezumatul în exercițiu.",
+          "userOutcome": "Informația devine ușor de recheamat."
+        },
+        {
+          "from": "lesson-flashcards",
+          "to": "lesson-quiz",
+          "title": "Verificare",
+          "reason": "Quiz-ul confirmă ce ai reținut.",
+          "userOutcome": "Identifici punctele slabe."
+        },
+        {
+          "from": "lesson-quiz",
+          "to": "lesson-complete",
+          "title": "Lecție completă",
+          "reason": "Ai parcurs explicație → rezumat → memorare → test.",
+          "userOutcome": "Poți trece la următoarea lecție."
+        }
+      ]
+    },
+    {
+      "id": "studii-prepare-for-exam",
+      "categorySlug": "studii",
+      "goalTitle": "Pregătește-te pentru un examen",
+      "goalDescription": "Plan structurat, simulare și quiz de recapitulare.",
+      "entryNodeId": "exam-plan",
+      "tags": [
+        "exam"
+      ],
+      "status": "active",
+      "priority": 2,
+      "nodes": [
+        {
+          "id": "exam-plan",
+          "type": "tool",
+          "toolId": "pregatire-examen",
+          "toolSlug": "pregatire-examen",
+          "title": "Pregătire Examen",
+          "userFacingAction": "Creează planul de pregătire",
+          "reason": "Fără plan, materia rămâne haotică.",
+          "userOutcome": "Ai un calendar de învățare pe zile.",
+          "estimatedMinutes": 10
+        },
+        {
+          "id": "exam-simulator",
+          "type": "tool",
+          "toolId": "simulator-examen",
+          "toolSlug": "simulator-examen",
+          "title": "Simulator Examen",
+          "userFacingAction": "Simulează condițiile de examen",
+          "reason": "Simularea reduce surprizele și anxietatea.",
+          "userOutcome": "Știi la ce să te aștepți la examen.",
+          "estimatedMinutes": 12
+        },
+        {
+          "id": "exam-quiz",
+          "type": "tool",
+          "toolId": "quiz-generator",
+          "toolSlug": "quiz-generator",
+          "title": "Quiz Generator",
+          "userFacingAction": "Generează quiz de recapitulare",
+          "reason": "Quiz-urile fixează informația pe termen scurt.",
+          "userOutcome": "Ai exerciții pentru ultimele zile.",
+          "estimatedMinutes": 6,
+          "optional": true
+        },
+        {
+          "id": "exam-complete",
+          "type": "completion",
+          "title": "Pregătire examen activă",
+          "userFacingAction": "Urmează planul zilnic",
+          "reason": "Planul și practica sunt aliniate.",
+          "userOutcome": "Ești pregătit să susții examenul."
+        }
+      ],
+      "edges": [
+        {
+          "from": "exam-plan",
+          "to": "exam-simulator",
+          "title": "Practică sub presiune",
+          "reason": "După plan, simularea testează pregătirea reală.",
+          "userOutcome": "Identifici golurile înainte de examen."
+        },
+        {
+          "from": "exam-simulator",
+          "to": "exam-quiz",
+          "title": "Recapitulare rapidă",
+          "reason": "Quiz-urile fixează detaliile din ultimele zile.",
+          "userOutcome": "Informația e proaspătă la examen."
+        },
+        {
+          "from": "exam-quiz",
+          "to": "exam-complete",
+          "title": "Pregătire completă",
+          "reason": "Ai plan + practică + recapitulare.",
+          "userOutcome": "Poți intra la examen cu încredere."
+        }
+      ]
+    },
+    {
+      "id": "cariera-career-direction",
+      "categorySlug": "cariera",
+      "goalTitle": "Clarifică direcția de carieră",
+      "goalDescription": "Plan de carieră, CV și pregătire pentru interviu.",
+      "entryNodeId": "career-plan",
+      "tags": [
+        "direction",
+        "career"
+      ],
+      "status": "active",
+      "priority": 1,
+      "nodes": [
+        {
+          "id": "career-plan",
+          "type": "tool",
+          "toolId": "plan-de-cariera",
+          "toolSlug": "plan-de-cariera",
+          "title": "Plan de Carieră",
+          "userFacingAction": "Definește direcția profesională",
+          "reason": "Fără direcție clară, aplicările sunt dispersate.",
+          "userOutcome": "Știi ce roluri și pași urmează.",
+          "estimatedMinutes": 12
+        },
+        {
+          "id": "career-cv",
+          "type": "tool",
+          "toolId": "cv-profesional",
+          "toolSlug": "cv-profesional",
+          "title": "CV Profesional",
+          "userFacingAction": "Construiește CV-ul aliniat planului",
+          "reason": "CV-ul trebuie să reflecte direcția aleasă.",
+          "userOutcome": "Ai un CV coerent cu obiectivul tău.",
+          "estimatedMinutes": 10
+        },
+        {
+          "id": "career-interview",
+          "type": "tool",
+          "toolId": "simulator-interviu",
+          "toolSlug": "simulator-interviu",
+          "title": "Simulator Interviu",
+          "userFacingAction": "Pregătește-te pentru interviu",
+          "reason": "Practica crește încrederea la întrebări reale.",
+          "userOutcome": "Răspunsurile tale sunt structurate.",
+          "estimatedMinutes": 10
+        },
+        {
+          "id": "career-complete",
+          "type": "completion",
+          "title": "Pregătire carieră completă",
+          "userFacingAction": "Aplică pentru rolurile țintă",
+          "reason": "Plan, CV și interviu sunt aliniate.",
+          "userOutcome": "Poți acționa cu claritate."
+        }
+      ],
+      "edges": [
+        {
+          "from": "career-plan",
+          "to": "career-cv",
+          "title": "CV aliniat",
+          "reason": "După direcție, CV-ul reflectă obiectivul.",
+          "userOutcome": "Aplicările sunt concentrate."
+        },
+        {
+          "from": "career-cv",
+          "to": "career-interview",
+          "title": "Pregătire interviu",
+          "reason": "CV-ul bun deschide ușa la interviu.",
+          "userOutcome": "Ești pregătit să prezinți experiența."
+        },
+        {
+          "from": "career-interview",
+          "to": "career-complete",
+          "title": "Gata de acțiune",
+          "reason": "Ai claritate, documente și practică.",
+          "userOutcome": "Poți aplica cu încredere."
+        }
+      ]
+    },
+    {
+      "id": "cariera-apply-for-job",
+      "categorySlug": "cariera",
+      "goalTitle": "Aplică pentru un job",
+      "goalDescription": "CV, scrisoare de intenție și pregătire interviu pentru o poziție.",
+      "entryNodeId": "job-cv",
+      "tags": [
+        "job",
+        "application"
+      ],
+      "status": "active",
+      "priority": 2,
+      "nodes": [
+        {
+          "id": "job-cv",
+          "type": "tool",
+          "toolId": "cv-profesional",
+          "toolSlug": "cv-profesional",
+          "title": "CV Profesional",
+          "userFacingAction": "Creează CV-ul pentru poziție",
+          "reason": "CV-ul este primul filtru la aplicare.",
+          "userOutcome": "Ai un CV adaptat rolului țintă.",
+          "estimatedMinutes": 10
+        },
+        {
+          "id": "job-letter",
+          "type": "tool",
+          "toolId": "scrisoare-de-intentie",
+          "toolSlug": "scrisoare-de-intentie",
+          "title": "Scrisoare de Intenție",
+          "userFacingAction": "Personalizează aplicarea",
+          "reason": "Scrisoarea explică de ce ești potrivit.",
+          "userOutcome": "Aplicația ta iese în evidență.",
+          "estimatedMinutes": 8
+        },
+        {
+          "id": "job-interview",
+          "type": "tool",
+          "toolId": "simulator-interviu",
+          "toolSlug": "simulator-interviu",
+          "title": "Simulator Interviu",
+          "userFacingAction": "Pregătește-te pentru interviu",
+          "reason": "Practica reduce emoția la interviu real.",
+          "userOutcome": "Răspunsurile sunt clare și structurate.",
+          "estimatedMinutes": 10
+        },
+        {
+          "id": "job-complete",
+          "type": "completion",
+          "title": "Aplicare pregătită",
+          "userFacingAction": "Trimite aplicația",
+          "reason": "Documentele și pregătirea sunt gata.",
+          "userOutcome": "Poți aplica pentru poziție."
+        }
+      ],
+      "edges": [
+        {
+          "from": "job-cv",
+          "to": "job-letter",
+          "title": "Scrisoare personalizată",
+          "reason": "CV-ul are nevoie de o scrisoare care îl susține.",
+          "userOutcome": "Aplicația e completă și convingătoare."
+        },
+        {
+          "from": "job-letter",
+          "to": "job-interview",
+          "title": "Pregătire interviu",
+          "reason": "Dacă treci de screening, interviul urmează.",
+          "userOutcome": "Ești pregătit pentru următorul pas."
+        },
+        {
+          "from": "job-interview",
+          "to": "job-complete",
+          "title": "Gata de trimitere",
+          "reason": "Toate elementele aplicării sunt pregătite.",
+          "userOutcome": "Poți trimite aplicația."
+        }
+      ]
+    },
+    {
+      "id": "fitness-lose-weight",
+      "categorySlug": "fitness",
+      "goalTitle": "Slăbește sănătos",
+      "goalDescription": "Plan de slăbire și alimentație sustenabilă.",
+      "entryNodeId": "loss-plan",
+      "tags": [
+        "weight-loss"
+      ],
+      "status": "active",
+      "priority": 1,
+      "nodes": [
+        {
+          "id": "loss-plan",
+          "type": "tool",
+          "toolId": "plan-slabire",
+          "toolSlug": "plan-slabire",
+          "title": "Plan Slăbire",
+          "userFacingAction": "Creează planul de slăbire",
+          "reason": "Slăbirea sustenabilă necesită structură, nu improvizație.",
+          "userOutcome": "Ai obiective și pași realiști.",
+          "estimatedMinutes": 10
+        },
+        {
+          "id": "loss-meals",
+          "type": "tool",
+          "toolId": "plan-alimentar",
+          "toolSlug": "plan-alimentar",
+          "title": "Plan Alimentar",
+          "userFacingAction": "Structurează mesele zilnice",
+          "reason": "Nutriția susține deficitul caloric.",
+          "userOutcome": "Știi ce mănânci și când.",
+          "estimatedMinutes": 8
+        },
+        {
+          "id": "loss-track",
+          "type": "tool",
+          "toolId": "tracker-progres",
+          "toolSlug": "tracker-progres",
+          "title": "Progress Tracker",
+          "userFacingAction": "Urmărește progresul",
+          "reason": "Măsurarea menține motivația și direcția.",
+          "userOutcome": "Vezi evoluția în timp.",
+          "estimatedMinutes": 4
+        },
+        {
+          "id": "loss-complete",
+          "type": "completion",
+          "title": "Plan de slăbire activ",
+          "userFacingAction": "Urmează planul zilnic",
+          "reason": "Nutriția și urmărirea sunt aliniate.",
+          "userOutcome": "Poți slăbi în mod constant."
+        }
+      ],
+      "edges": [
+        {
+          "from": "loss-plan",
+          "to": "loss-meals",
+          "title": "Alimentație structurată",
+          "reason": "Planul de slăbire devine concret în mese.",
+          "userOutcome": "Deficitul e ușor de respectat."
+        },
+        {
+          "from": "loss-meals",
+          "to": "loss-track",
+          "title": "Urmărire progres",
+          "reason": "Fără tracking, progresul e invizibil.",
+          "userOutcome": "Ajustezi planul pe baza rezultatelor."
+        },
+        {
+          "from": "loss-track",
+          "to": "loss-complete",
+          "title": "Sistem complet",
+          "reason": "Plan + nutriție + tracking sunt conectate.",
+          "userOutcome": "Slăbirea devine predictibilă."
+        }
+      ]
+    },
+    {
+      "id": "fitness-build-muscle",
+      "categorySlug": "fitness",
+      "goalTitle": "Construiește masă musculară",
+      "goalDescription": "Obiective, plan de masă și nutriție pentru creștere.",
+      "entryNodeId": "muscle-goals",
+      "tags": [
+        "muscle",
+        "gain"
+      ],
+      "status": "active",
+      "priority": 2,
+      "nodes": [
+        {
+          "id": "muscle-goals",
+          "type": "tool",
+          "toolId": "obiective-fitness",
+          "toolSlug": "obiective-fitness",
+          "title": "Obiective Fitness",
+          "userFacingAction": "Definește obiectivul de masă",
+          "reason": "Obiectivul clar ghidează antrenamentul și dieta.",
+          "userOutcome": "Știi ce vrei să obții și în ce termen.",
+          "estimatedMinutes": 6
+        },
+        {
+          "id": "muscle-plan",
+          "type": "tool",
+          "toolId": "plan-masa-musculare",
+          "toolSlug": "plan-masa-musculare",
+          "title": "Plan Masă Musculară",
+          "userFacingAction": "Creează planul de antrenament",
+          "reason": "Creșterea musculară necesită progresie structurată.",
+          "userOutcome": "Ai un program de antrenament adaptat.",
+          "estimatedMinutes": 10
+        },
+        {
+          "id": "muscle-nutrition",
+          "type": "tool",
+          "toolId": "plan-alimentar",
+          "toolSlug": "plan-alimentar",
+          "title": "Plan Alimentar",
+          "userFacingAction": "Aliniază nutriția la obiectiv",
+          "reason": "Fără surplus caloric controlat, masa nu crește.",
+          "userOutcome": "Mesele susțin creșterea musculară.",
+          "estimatedMinutes": 8
+        },
+        {
+          "id": "muscle-track",
+          "type": "tool",
+          "toolId": "tracker-progres",
+          "toolSlug": "tracker-progres",
+          "title": "Progress Tracker",
+          "userFacingAction": "Monitorizează evoluția",
+          "reason": "Progresul se vede în timp, nu de la o zi la alta.",
+          "userOutcome": "Ajustezi planul pe baza datelor.",
+          "estimatedMinutes": 4
+        },
+        {
+          "id": "muscle-complete",
+          "type": "completion",
+          "title": "Plan de masă activ",
+          "userFacingAction": "Execută antrenamentul și mesele",
+          "reason": "Obiectiv, antrenament, nutriție și tracking sunt aliniate.",
+          "userOutcome": "Poți construi masă în mod constant."
+        }
+      ],
+      "edges": [
+        {
+          "from": "muscle-goals",
+          "to": "muscle-plan",
+          "title": "Program de antrenament",
+          "reason": "Obiectivul se traduce în plan concret.",
+          "userOutcome": "Antrenamentul e structurat."
+        },
+        {
+          "from": "muscle-plan",
+          "to": "muscle-nutrition",
+          "title": "Nutriție pentru masă",
+          "reason": "Antrenamentul are nevoie de combustibil.",
+          "userOutcome": "Dieta susține creșterea."
+        },
+        {
+          "from": "muscle-nutrition",
+          "to": "muscle-track",
+          "title": "Urmărire progres",
+          "reason": "Tracking-ul arată dacă planul funcționează.",
+          "userOutcome": "Poți ajusta volumul și caloriile."
+        },
+        {
+          "from": "muscle-track",
+          "to": "muscle-complete",
+          "title": "Sistem complet",
+          "reason": "Toate componentele sunt conectate.",
+          "userOutcome": "Creșterea musculară e predictibilă."
+        }
+      ]
+    },
+    {
+      "id": "finante-monthly-budget",
+      "categorySlug": "finante",
+      "goalTitle": "Organizează bugetul lunar",
+      "goalDescription": "Buget personal și analiză cheltuieli pentru control financiar.",
+      "entryNodeId": "budget-create",
+      "tags": [
+        "budget"
+      ],
+      "status": "active",
+      "priority": 1,
+      "nodes": [
+        {
+          "id": "budget-create",
+          "type": "tool",
+          "toolId": "buget-personal",
+          "toolSlug": "buget-personal",
+          "title": "Buget Personal",
+          "userFacingAction": "Creează bugetul lunar",
+          "reason": "Fără buget, banii dispar fără vizibilitate.",
+          "userOutcome": "Știi unde merg banii în fiecare lună.",
+          "estimatedMinutes": 8
+        },
+        {
+          "id": "budget-expenses",
+          "type": "tool",
+          "toolId": "analiza-cheltuieli",
+          "toolSlug": "analiza-cheltuieli",
+          "title": "Analiză Cheltuieli",
+          "userFacingAction": "Identifică unde poți economisi",
+          "reason": "Analiza arată risipa ascunsă.",
+          "userOutcome": "Găsești categorii de optimizat.",
+          "estimatedMinutes": 8
+        },
+        {
+          "id": "budget-complete",
+          "type": "completion",
+          "title": "Buget lunar structurat",
+          "userFacingAction": "Monitorizează lunar",
+          "reason": "Bugetul și analiza sunt aliniate.",
+          "userOutcome": "Ai control asupra finanțelor."
+        }
+      ],
+      "edges": [
+        {
+          "from": "budget-create",
+          "to": "budget-expenses",
+          "title": "Analiză cheltuieli",
+          "reason": "După buget, analiza arată unde ajustezi.",
+          "userOutcome": "Identifici economii concrete."
+        },
+        {
+          "from": "budget-expenses",
+          "to": "budget-complete",
+          "title": "Control financiar",
+          "reason": "Bugetul e fundamentat pe date reale.",
+          "userOutcome": "Poți menține disciplina financiară."
+        }
+      ]
+    },
+    {
+      "id": "finante-reduce-debt",
+      "categorySlug": "finante",
+      "goalTitle": "Redu datoriile",
+      "goalDescription": "Plan de reducere datorii, analiză cheltuieli și economii.",
+      "entryNodeId": "debt-plan",
+      "tags": [
+        "debt"
+      ],
+      "status": "active",
+      "priority": 2,
+      "nodes": [
+        {
+          "id": "debt-plan",
+          "type": "tool",
+          "toolId": "plan-reducere-datorii",
+          "toolSlug": "plan-reducere-datorii",
+          "title": "Plan Reducere Datorii",
+          "userFacingAction": "Creează planul de achitare",
+          "reason": "Datoriile fără plan cresc prin dobânzi.",
+          "userOutcome": "Ai o strategie clară de achitare.",
+          "estimatedMinutes": 10
+        },
+        {
+          "id": "debt-expenses",
+          "type": "tool",
+          "toolId": "analiza-cheltuieli",
+          "toolSlug": "analiza-cheltuieli",
+          "title": "Analiză Cheltuieli",
+          "userFacingAction": "Găsește bani pentru rate",
+          "reason": "Trebuie eliberat cash flow pentru datorii.",
+          "userOutcome": "Identifici de unde vin banii extra.",
+          "estimatedMinutes": 8
+        },
+        {
+          "id": "debt-savings",
+          "type": "tool",
+          "toolId": "plan-economii",
+          "toolSlug": "plan-economii",
+          "title": "Plan Economii",
+          "userFacingAction": "Structurează economiile post-datorie",
+          "reason": "După achitare, economiile previn recăderea.",
+          "userOutcome": "Ai un plan pentru stabilitate financiară.",
+          "estimatedMinutes": 8
+        },
+        {
+          "id": "debt-complete",
+          "type": "completion",
+          "title": "Plan de reducere datorii activ",
+          "userFacingAction": "Execută planul lunar",
+          "reason": "Strategia, analiza și economiile sunt conectate.",
+          "userOutcome": "Poți deveni fără datorii."
+        }
+      ],
+      "edges": [
+        {
+          "from": "debt-plan",
+          "to": "debt-expenses",
+          "title": "Eliberare cash flow",
+          "reason": "Planul de datorii are nevoie de bani identificați.",
+          "userOutcome": "Știi de unde vin plățile extra."
+        },
+        {
+          "from": "debt-expenses",
+          "to": "debt-savings",
+          "title": "Plan post-datorie",
+          "reason": "După achitare, economiile mențin libertatea.",
+          "userOutcome": "Nu revii la datorii noi."
+        },
+        {
+          "from": "debt-savings",
+          "to": "debt-complete",
+          "title": "Stabilitate financiară",
+          "reason": "Ai un parcurs complet de la datorie la economii.",
+          "userOutcome": "Finanțele tale sunt sub control."
+        }
+      ]
+    },
+    {
+      "id": "comunicare-professional-email",
+      "categorySlug": "comunicare",
+      "goalTitle": "Scrie profesional",
+      "goalDescription": "Email și mesaj profesional pentru context de lucru.",
+      "entryNodeId": "pro-email",
+      "tags": [
+        "professional"
+      ],
+      "status": "active",
+      "priority": 1,
+      "nodes": [
+        {
+          "id": "pro-email",
+          "type": "tool",
+          "toolId": "scire-emai-profesional",
+          "toolSlug": "scire-emai-profesional",
+          "title": "Scrie Email Profesional",
+          "userFacingAction": "Redactează emailul principal",
+          "reason": "Emailul este canalul standard în mediul profesional.",
+          "userOutcome": "Ai un email clar, respectuos și eficient.",
+          "estimatedMinutes": 6
+        },
+        {
+          "id": "pro-message",
+          "type": "tool",
+          "toolId": "scrie-mesaj-profesional",
+          "toolSlug": "scrie-mesaj-profesional",
+          "title": "Scrie Mesaj Profesional",
+          "userFacingAction": "Adaptează mesajul pentru alt canal",
+          "reason": "Uneori mesajul merge pe Slack, LinkedIn sau SMS.",
+          "userOutcome": "Comunicarea e consistentă pe orice canal.",
+          "estimatedMinutes": 5
+        },
+        {
+          "id": "pro-complete",
+          "type": "completion",
+          "title": "Comunicare profesională pregătită",
+          "userFacingAction": "Trimite mesajul",
+          "reason": "Emailul și adaptarea sunt gata.",
+          "userOutcome": "Poți comunica cu încredere."
+        }
+      ],
+      "edges": [
+        {
+          "from": "pro-email",
+          "to": "pro-message",
+          "title": "Adaptare pe canal",
+          "reason": "Același mesaj poate fi nevoie pe alt format.",
+          "userOutcome": "Comunicarea e coerentă peste tot."
+        },
+        {
+          "from": "pro-message",
+          "to": "pro-complete",
+          "title": "Gata de trimitere",
+          "reason": "Mesajele sunt finalizate.",
+          "userOutcome": "Poți trimite cu încredere."
+        }
+      ]
+    },
+    {
+      "id": "comunicare-difficult-conversation",
+      "categorySlug": "comunicare",
+      "goalTitle": "Pregătește o conversație dificilă",
+      "goalDescription": "Mesaj clar și opțiuni de rezolvare pentru situații tensionate.",
+      "entryNodeId": "difficult-msg",
+      "tags": [
+        "conflict"
+      ],
+      "status": "active",
+      "priority": 2,
+      "nodes": [
+        {
+          "id": "difficult-msg",
+          "type": "tool",
+          "toolId": "conversatie-dificila",
+          "toolSlug": "conversatie-dificila",
+          "title": "Conversație Dificilă",
+          "userFacingAction": "Pregătește conversația",
+          "reason": "Pregătirea reduce tensiunea și clarifică mesajul.",
+          "userOutcome": "Știi ce spui și cum începi.",
+          "estimatedMinutes": 8
+        },
+        {
+          "id": "difficult-resolve",
+          "type": "tool",
+          "toolId": "rezolva-conflict",
+          "toolSlug": "rezolva-conflict",
+          "title": "Rezolvare Conflict",
+          "userFacingAction": "Explorează opțiuni de rezolvare",
+          "reason": "Conversația are nevoie de o direcție constructivă.",
+          "userOutcome": "Ai variante de de-escaladare.",
+          "estimatedMinutes": 8,
+          "optional": true
+        },
+        {
+          "id": "difficult-complete",
+          "type": "completion",
+          "title": "Conversație pregătită",
+          "userFacingAction": "Inițiază discuția",
+          "reason": "Mesajul și opțiunile sunt clare.",
+          "userOutcome": "Poți aborda situația cu calm."
+        }
+      ],
+      "edges": [
+        {
+          "from": "difficult-msg",
+          "to": "difficult-resolve",
+          "title": "Rezolvare constructivă",
+          "reason": "După mesaj, explorezi cum se încheie pozitiv.",
+          "userOutcome": "Conversația are o direcție clară."
+        },
+        {
+          "from": "difficult-resolve",
+          "to": "difficult-complete",
+          "title": "Pregătire completă",
+          "reason": "Ai mesaj și opțiuni de rezolvare.",
+          "userOutcome": "Poți iniția discuția."
+        }
+      ]
+    },
+    {
+      "id": "socialMedia-content-system",
+      "categorySlug": "socialMedia",
+      "goalTitle": "Creează un sistem de conținut",
+      "goalDescription": "Strategie Instagram, calendar și scripturi pentru publicare constantă.",
+      "entryNodeId": "content-strategy",
+      "tags": [
+        "instagram",
+        "content"
+      ],
+      "status": "active",
+      "priority": 1,
+      "nodes": [
+        {
+          "id": "content-strategy",
+          "type": "tool",
+          "toolId": "strategie-instagram",
+          "toolSlug": "strategie-instagram",
+          "title": "Strategie Instagram",
+          "userFacingAction": "Definește direcția de conținut",
+          "reason": "Fără strategie, postările sunt inconsistente.",
+          "userOutcome": "Știi ce publici, pentru cine și de ce.",
+          "estimatedMinutes": 10
+        },
+        {
+          "id": "content-calendar",
+          "type": "tool",
+          "toolId": "calendar-continut",
+          "toolSlug": "calendar-continut",
+          "title": "Calendar Conținut",
+          "userFacingAction": "Planifică postările pe săptămâni",
+          "reason": "Calendarul transformă strategia în acțiuni.",
+          "userOutcome": "Ai un plan de publicare clar.",
+          "estimatedMinutes": 8
+        },
+        {
+          "id": "content-script",
+          "type": "tool",
+          "toolId": "script-reels",
+          "toolSlug": "script-reels",
+          "title": "Script Reels",
+          "userFacingAction": "Scrie scripturi pentru clipuri",
+          "reason": "Scripturile accelerează filmarea.",
+          "userOutcome": "Poți produce conținut rapid.",
+          "estimatedMinutes": 6
+        },
+        {
+          "id": "content-hooks",
+          "type": "tool",
+          "toolId": "generator-hook",
+          "toolSlug": "generator-hook",
+          "title": "Generator Hook-uri",
+          "userFacingAction": "Creează hook-uri pentru atenție",
+          "reason": "Primele secunde decid dacă vizualizatorul rămâne.",
+          "userOutcome": "Clipurile captează atenția de la început.",
+          "estimatedMinutes": 4,
+          "optional": true
+        },
+        {
+          "id": "content-complete",
+          "type": "completion",
+          "title": "Sistem de conținut activ",
+          "userFacingAction": "Publică conform calendarului",
+          "reason": "Strategie, calendar și scripturi sunt aliniate.",
+          "userOutcome": "Poți posta constant și coerent."
+        }
+      ],
+      "edges": [
+        {
+          "from": "content-strategy",
+          "to": "content-calendar",
+          "title": "Planificare conținut",
+          "reason": "Strategia devine postări concrete pe calendar.",
+          "userOutcome": "Publicarea e organizată."
+        },
+        {
+          "from": "content-calendar",
+          "to": "content-script",
+          "title": "Scripturi de filmat",
+          "reason": "Calendarul are nevoie de conținut executabil.",
+          "userOutcome": "Producția e rapidă."
+        },
+        {
+          "from": "content-script",
+          "to": "content-hooks",
+          "title": "Hook-uri de atenție",
+          "reason": "Scripturile beneficiază de deschideri puternice.",
+          "userOutcome": "Conținutul reține audiența."
+        },
+        {
+          "from": "content-hooks",
+          "to": "content-complete",
+          "title": "Pipeline complet",
+          "reason": "Ai strategie → calendar → script → hook.",
+          "userOutcome": "Poți publica în mod repetabil."
+        }
+      ]
+    },
+    {
+      "id": "socialMedia-grow-tiktok",
+      "categorySlug": "socialMedia",
+      "goalTitle": "Crește pe TikTok",
+      "goalDescription": "Strategie, idei și scripturi pentru creștere pe TikTok.",
+      "entryNodeId": "tiktok-strategy",
+      "tags": [
+        "tiktok"
+      ],
+      "status": "active",
+      "priority": 2,
+      "nodes": [
+        {
+          "id": "tiktok-strategy",
+          "type": "tool",
+          "toolId": "strategie-crestere-tiktok",
+          "toolSlug": "strategie-crestere-tiktok",
+          "title": "Strategie Creștere TikTok",
+          "userFacingAction": "Definește strategia TikTok",
+          "reason": "Creșterea necesită consistență și direcție.",
+          "userOutcome": "Știi ce tip de conținut produce rezultate.",
+          "estimatedMinutes": 10
+        },
+        {
+          "id": "tiktok-ideas",
+          "type": "tool",
+          "toolId": "idei-tiktok",
+          "toolSlug": "idei-tiktok",
+          "title": "Idei TikTok",
+          "userFacingAction": "Generează idei de clipuri",
+          "reason": "Ideile alimentează producția săptămânală.",
+          "userOutcome": "Nu mai rămâi fără subiecte.",
+          "estimatedMinutes": 6
+        },
+        {
+          "id": "tiktok-script",
+          "type": "tool",
+          "toolId": "script-tiktok",
+          "toolSlug": "script-tiktok",
+          "title": "Script TikTok",
+          "userFacingAction": "Scrie scriptul clipului",
+          "reason": "Scriptul reduce timpul de filmare.",
+          "userOutcome": "Poți filma rapid și consistent.",
+          "estimatedMinutes": 6
+        },
+        {
+          "id": "tiktok-complete",
+          "type": "completion",
+          "title": "Pipeline TikTok activ",
+          "userFacingAction": "Publică conform strategiei",
+          "reason": "Strategie, idei și script sunt aliniate.",
+          "userOutcome": "Poți crește pe TikTok în mod constant."
+        }
+      ],
+      "edges": [
+        {
+          "from": "tiktok-strategy",
+          "to": "tiktok-ideas",
+          "title": "Idei de conținut",
+          "reason": "Strategia se traduce în subiecte concrete.",
+          "userOutcome": "Ai o listă de clipuri de filmat."
+        },
+        {
+          "from": "tiktok-ideas",
+          "to": "tiktok-script",
+          "title": "Script de filmat",
+          "reason": "Ideile au nevoie de execuție rapidă.",
+          "userOutcome": "Producția e eficientă."
+        },
+        {
+          "from": "tiktok-script",
+          "to": "tiktok-complete",
+          "title": "Gata de publicare",
+          "reason": "Pipeline-ul TikTok e complet.",
+          "userOutcome": "Poți posta constant."
+        }
+      ]
+    },
+    {
+      "id": "viataPersonala-achieve-goals",
+      "categorySlug": "viataPersonala",
+      "goalTitle": "Atinge obiective personale",
+      "goalDescription": "Planificare obiective, prioritizare și obiceiuri pentru progres.",
+      "entryNodeId": "goals-plan",
+      "tags": [
+        "goals"
+      ],
+      "status": "active",
+      "priority": 1,
+      "nodes": [
+        {
+          "id": "goals-plan",
+          "type": "tool",
+          "toolId": "planificare-obiective",
+          "toolSlug": "planificare-obiective",
+          "title": "Planificare Obiective",
+          "userFacingAction": "Definește obiectivele clare",
+          "reason": "Obiectivele vagi nu produc progres.",
+          "userOutcome": "Știi exact ce vrei să realizezi.",
+          "estimatedMinutes": 8
+        },
+        {
+          "id": "goals-priorities",
+          "type": "tool",
+          "toolId": "gestionare-prioritati",
+          "toolSlug": "gestionare-prioritati",
+          "title": "Gestionare Priorități",
+          "userFacingAction": "Prioritizează ce contează acum",
+          "reason": "Fără priorități, timpul se risipește.",
+          "userOutcome": "Focus pe ce aduce cel mai mult progres.",
+          "estimatedMinutes": 6
+        },
+        {
+          "id": "goals-habits",
+          "type": "tool",
+          "toolId": "habit-tracker-planner",
+          "toolSlug": "habit-tracker-planner",
+          "title": "Habit Tracker Planner",
+          "userFacingAction": "Construiește obiceiuri zilnice",
+          "reason": "Obiectivele mari se ating prin obiceiuri mici.",
+          "userOutcome": "Ai un plan de acțiuni zilnice.",
+          "estimatedMinutes": 6
+        },
+        {
+          "id": "goals-complete",
+          "type": "completion",
+          "title": "Plan de obiective activ",
+          "userFacingAction": "Execută obiceiurile zilnic",
+          "reason": "Obiective, priorități și obiceiuri sunt aliniate.",
+          "userOutcome": "Progresul devine vizibil."
+        }
+      ],
+      "edges": [
+        {
+          "from": "goals-plan",
+          "to": "goals-priorities",
+          "title": "Prioritizare",
+          "reason": "După obiective, alegi ce faci primul.",
+          "userOutcome": "Energia merge unde contează."
+        },
+        {
+          "from": "goals-priorities",
+          "to": "goals-habits",
+          "title": "Obiceiuri zilnice",
+          "reason": "Prioritățile devin acțiuni repetabile.",
+          "userOutcome": "Progresul e constant."
+        },
+        {
+          "from": "goals-habits",
+          "to": "goals-complete",
+          "title": "Sistem de progres",
+          "reason": "Ai un parcurs complet de la obiectiv la acțiune.",
+          "userOutcome": "Poți atinge obiectivele pas cu pas."
+        }
+      ]
+    },
+    {
+      "id": "viataPersonala-plan-vacation",
+      "categorySlug": "viataPersonala",
+      "goalTitle": "Planifică o vacanță",
+      "goalDescription": "Planificare și itinerariu pentru o vacanță fără stres.",
+      "entryNodeId": "vacation-plan",
+      "tags": [
+        "vacation"
+      ],
+      "status": "active",
+      "priority": 2,
+      "nodes": [
+        {
+          "id": "vacation-plan",
+          "type": "tool",
+          "toolId": "planificare-vacanta",
+          "toolSlug": "planificare-vacanta",
+          "title": "Planificare Vacanță",
+          "userFacingAction": "Planifică vacanța",
+          "reason": "Planificarea reduce stresul și costurile surpriză.",
+          "userOutcome": "Ai buget, date și logistică clară.",
+          "estimatedMinutes": 10
+        },
+        {
+          "id": "vacation-itinerary",
+          "type": "tool",
+          "toolId": "itinerariu-vacanta",
+          "toolSlug": "itinerariu-vacanta",
+          "title": "Itinerariu Vacanță",
+          "userFacingAction": "Construiește itinerariul zilnic",
+          "reason": "Itinerariul optimizează timpul în destinație.",
+          "userOutcome": "Știi ce vizitezi în fiecare zi.",
+          "estimatedMinutes": 8
+        },
+        {
+          "id": "vacation-complete",
+          "type": "completion",
+          "title": "Vacanță planificată",
+          "userFacingAction": "Rezervă și pleacă",
+          "reason": "Planul și itinerariul sunt gata.",
+          "userOutcome": "Poți pleca fără griji."
+        }
+      ],
+      "edges": [
+        {
+          "from": "vacation-plan",
+          "to": "vacation-itinerary",
+          "title": "Itinerariu zilnic",
+          "reason": "După plan general, detaliezi zilele.",
+          "userOutcome": "Vacanța e optimizată."
+        },
+        {
+          "from": "vacation-itinerary",
+          "to": "vacation-complete",
+          "title": "Gata de plecare",
+          "reason": "Totul e planificat.",
+          "userOutcome": "Poți rezerva și pleca."
+        }
+      ]
+    }
+  ]
+}
