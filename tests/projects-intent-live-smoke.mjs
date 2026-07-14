@@ -6,6 +6,10 @@
 //   PROJECTS_ACCESS_TOKEN="<supabase access_token>" \
 //   node tests/projects-intent-live-smoke.mjs
 
+import { requireOpenAiLiveTestsOrSkip, readLiveSmokeProjectCap } from "../lib/projects/brain/openai-live-test-guard.js";
+
+requireOpenAiLiveTestsOrSkip("projects-intent-live-smoke");
+
 const BASE_URL = (process.env.PROJECTS_BASE_URL || "").replace(/\/+$/, "");
 const TOKEN = process.env.PROJECTS_ACCESS_TOKEN || "";
 

@@ -239,8 +239,9 @@ describe("openai structured client", () => {
     });
 
     assert.equal(result.ok, false);
-    assert.equal(result.reason, "upstream");
-    assert.equal(result.fallbackAttempted, true);
+    assert.equal(result.reason, "invalid_request");
+    assert.equal(result.fallbackAttempted, false);
+    assert.equal(result.providerCallCount, 1);
   });
 });
 

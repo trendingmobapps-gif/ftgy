@@ -186,11 +186,11 @@ describe("projects generator input and result persistence", () => {
 
   it("8. result generation uses Project model policy", () => {
     const policy = resolveProjectModelPolicy("execution");
-    assert.equal(policy.operation, "execution");
+    assert.equal(policy.role, "resultGeneration");
     assert.ok(policy.model);
     assert.equal(policy.reasoningEffort, "high");
     const source = read("lib/projects/brain/actions/generation.js");
-    assert.match(source, /resolveProjectModelPolicy\("execution"\)/);
+    assert.match(source, /resolveProjectModelRuntimePolicy/);
   });
 
   it("9. USMLE accepted input keeps only plan fields", () => {

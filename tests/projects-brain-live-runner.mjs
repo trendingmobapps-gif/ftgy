@@ -2,8 +2,11 @@ import { spawn } from "node:child_process";
 import { randomUUID } from "node:crypto";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
+import { requireOpenAiLiveTestsOrSkip } from "../lib/projects/brain/openai-live-test-guard.js";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
+
+requireOpenAiLiveTestsOrSkip("projects-brain-live-runner");
 
 const BASE_URL = (process.env.PROJECTS_BASE_URL || "").replace(/\/+$/, "");
 const SUPABASE_URL = (process.env.SUPABASE_URL || "https://cvxhuetjondnmjuobcbx.supabase.co").replace(

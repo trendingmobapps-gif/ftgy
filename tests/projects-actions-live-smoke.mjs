@@ -1,5 +1,9 @@
 // Live action execution smoke extension for Preview deployments.
 
+import { requireOpenAiLiveTestsOrSkip } from "../lib/projects/brain/openai-live-test-guard.js";
+
+requireOpenAiLiveTestsOrSkip("projects-actions-live-smoke");
+
 const BASE_URL = (process.env.PROJECTS_BASE_URL || "").replace(/\/+$/, "");
 const TOKEN = process.env.PROJECTS_ACCESS_TOKEN || "";
 

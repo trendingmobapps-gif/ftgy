@@ -1,6 +1,12 @@
 // Live Project Brain smoke for Preview deployments.
 // Never prints tokens, passwords, or service-role keys.
 
+import { requireOpenAiLiveTestsOrSkip, readLiveSmokeProjectCap } from "../lib/projects/brain/openai-live-test-guard.js";
+
+requireOpenAiLiveTestsOrSkip("projects-brain-live-smoke");
+
+const PROJECT_CAP = readLiveSmokeProjectCap(2);
+
 const BASE_URL = (process.env.PROJECTS_BASE_URL || "").replace(/\/+$/, "");
 const TOKEN = process.env.PROJECTS_ACCESS_TOKEN || "";
 const SUPABASE_URL = (process.env.SUPABASE_URL || "").replace(/\/+$/, "");
@@ -299,11 +305,14 @@ async function cleanup() {
 
 async function main() {
   console.log(`Project Brain live smoke against ${BASE_URL}`);
+  console.log(`Live smoke project cap: ${PROJECT_CAP}`);
   await runCaseD();
-  await runCaseA();
-  await runCaseB();
-  await runCaseC();
-  await runCaseE();
+  if (PROJECT_CAP >= 1) {
+    await runCaseA();
+  }
+  if (PROJECT_CAP >= 2) {
+    await runCaseB();
+  }
   await cleanup();
   console.log(`\nResult: ${passed} passed, ${failed} failed`);
   process.exit(failed > 0 ? 1 : 0);

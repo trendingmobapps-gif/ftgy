@@ -7,6 +7,10 @@
 //   SUPABASE_URL (optional, for direct row-count verification)
 //   SUPABASE_SECRET_KEY (optional, for direct row-count verification)
 
+import { requireOpenAiLiveTestsOrSkip } from "../lib/projects/brain/openai-live-test-guard.js";
+
+requireOpenAiLiveTestsOrSkip("projects-safety-live-smoke");
+
 const BASE_URL = (process.env.PROJECTS_BASE_URL || "").replace(/\/+$/, "");
 const TOKEN = process.env.PROJECTS_ACCESS_TOKEN || "";
 const SUPABASE_URL = (process.env.SUPABASE_URL || "").replace(/\/+$/, "");

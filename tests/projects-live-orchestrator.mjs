@@ -9,6 +9,10 @@
 import { spawn } from "node:child_process";
 import { randomUUID } from "node:crypto";
 
+import { requireOpenAiLiveTestsOrSkip } from "../lib/projects/brain/openai-live-test-guard.js";
+
+requireOpenAiLiveTestsOrSkip("projects-live-orchestrator");
+
 const SUPABASE_URL = (process.env.SUPABASE_URL || "").replace(/\/+$/, "");
 const SERVICE_KEY = process.env.SUPABASE_SECRET_KEY || "";
 const BASE_URL = (process.env.PROJECTS_BASE_URL || "").replace(/\/+$/, "");
