@@ -293,7 +293,7 @@ Never logs: user answers, raw goals, prompts, chain-of-thought, memory contents,
 | `test:projects-openai-guardrails` | 26/26 pass |
 | `test:projects-openai-step2` | 31/31 pass |
 | `test:projects-strategic-calls` | 41/41 pass |
-| `test:projects-intent` (full) | **497/497 pass** |
+| `test:projects-intent` (full) | **511/511 pass** |
 
 ---
 
@@ -438,7 +438,7 @@ Primary new savings: **eliminates any accidental action-design path during roadm
 6. YES — partial stale marking preserves unaffected steps  
 7. YES  
 8. YES  
-9. YES — 497/497  
+9. YES — 511/511  
 10. NO — no deployment  
 
 ---
@@ -538,7 +538,7 @@ Stale/missing snapshots trigger deterministic reconstruction without OpenAI. Mis
 | 7 | Valid action contracts reused without snapshot | Pass |
 | 8 | Reopening action, zero model calls | Pass |
 | 9 | Changed material action evidence permits one call | Pass |
-| 10 | Full Projects backend suite | **497/497 pass** |
+| 10 | Full Projects backend suite | **511/511 pass** |
 
 ### 28.7 Remaining transactional risk
 
@@ -557,8 +557,175 @@ Stale/missing snapshots trigger deterministic reconstruction without OpenAI. Mis
 6. **Can stale snapshot force unnecessary roadmap regeneration?** — **NO** (consistency check → reconstruct)
 7. **Can valid action contracts be reused without a snapshot?** — **YES**
 8. **Does reopening a valid action make zero model calls?** — **YES**
-9. **Did all regression suites pass?** — **YES** (497/497)
+9. **Did all regression suites pass?** — **YES** (511/511)
 10. **Was any deployment performed?** — **NO**
+
+---
+
+## 29. Live Preview Snapshot Persistence Failure — Root Cause and Fix
+
+**Date:** 2026-07-15  
+**Affected project:** `c1daf2f8-4576-4dfb-9213-8b88e637fe19`  
+**Internal error:** `PROJECT_BRAIN_SNAPSHOT_PERSIST_FAILED`
+
+### 29.1 Verified live sequence
+
+1. One frontier roadmap OpenAI call succeeded (`gpt-5.6-sol`, medium reasoning, 5212 total tokens).
+2. Roadmap validation succeeded — 5 milestones, 20 steps.
+3. `project_workflows`, `project_milestones`, `project_steps` persisted successfully.
+4. `persistBrainSnapshotToMemory()` failed at `upsertProjectMemoryFacts()`.
+5. Endpoint returned HTTP 502 / `PROJECT_BRAIN_GENERATION_FAILED`.
+6. `brain_status` set to `failed`, `brain_failure_code: snapshot_persistence_error`.
+7. Repeated `/api/projects-workflow` reads succeeded (read-only, zero OpenAI).
+
+### 29.2 Exact root cause
+
+**`project_memory.source` CHECK constraint violation.**
+
+Migration `20260715_project_adaptive_brain.sql` defines:
+
+```sql
+source text not null default 'session'
+  check (source in ('session', 'resource', 'upload', 'workflow', 'system'))
+```
+
+Step 2.1 snapshot persistence wrote `source: "brain_snapshot"` — **not in the allowed set**. Supabase rejected the upsert with HTTP 400 / PostgreSQL code `23514` (check constraint violation). The repository swallowed the error and returned generic `PROJECT_BRAIN_SNAPSHOT_PERSIST_FAILED` with no Supabase metadata in logs.
+
+Workflow adaptation persistence had the same class of bug (`source: "workflow_adaptation"`).
+
+### 29.3 Actual project_memory schema contract
+
+| Column | Type | Required | Notes |
+|--------|------|----------|-------|
+| `id` | uuid | auto | PK |
+| `project_id` | uuid | yes | FK → projects |
+| `user_id` | uuid | yes | owner |
+| `memory_key` | text | yes | unique per (project_id, user_id, memory_key) |
+| `memory_value` | text | yes | JSON snapshot stored as string |
+| `source` | text | yes | **only** session/resource/upload/workflow/system |
+| `confidence` | numeric(4,3) | yes | default 1.000 |
+| `created_at`, `updated_at` | timestamptz | auto | |
+
+Upsert: `POST /rest/v1/project_memory?on_conflict=project_id,user_id,memory_key` with `Prefer: resolution=merge-duplicates,return=representation`.
+
+Snapshot keys: `brain_snapshot_v1`, `brain_snapshot_v1_evidence_hash`.
+
+### 29.4 Why existing tests did not catch it
+
+- Unit mocks returned HTTP 201 with `[{ memory_key: "brain_snapshot_v1" }]` without enforcing the `source` CHECK constraint.
+- No test asserted the posted `source` value against the migration schema.
+- Repository did not surface Supabase error codes, masking the constraint failure category.
+
+### 29.5 Files / functions changed
+
+| File | Change |
+|------|--------|
+| `lib/projects/brain/memory/constants.js` | `PROJECT_MEMORY_ARTIFACT_SOURCES`, `resolveProjectMemorySource()` |
+| `lib/projects/brain/memory/error-utils.js` | **New** — Supabase error extraction + categorization |
+| `lib/projects/brain/memory/repository.js` | Source validation, sanitized error logging, structured failure returns |
+| `lib/projects/brain/snapshot/serialization.js` | **New** — validate + JSON.stringify once + byte length |
+| `lib/projects/brain/snapshot/persistence.js` | Use `source: system`, read-back verification, typed errors |
+| `lib/projects/brain/brain-snapshot-observability.js` | `logBrainSnapshotPersistenceFailure()` |
+| `lib/projects/brain/project-brain-internal-codes.js` | Granular internal codes + error categories |
+| `scripts/inspect-project-brain-snapshot-state.mjs` | **New** — read-only live inspection |
+| `tests/projects-brain-snapshot-memory-persistence-fix.test.mjs` | **New** — 14 regression tests |
+
+### 29.6 Persistence payload shape (no private values)
+
+```json
+[
+  {
+    "project_id": "<uuid>",
+    "user_id": "<uuid>",
+    "memory_key": "brain_snapshot_v1",
+    "memory_value": "<JSON string, ~8–15 KB for 20 steps>",
+    "source": "system",
+    "confidence": 1,
+    "updated_at": "<ISO8601>"
+  },
+  {
+    "project_id": "<uuid>",
+    "user_id": "<uuid>",
+    "memory_key": "brain_snapshot_v1_evidence_hash",
+    "memory_value": "<roadmap evidence hash>",
+    "source": "system",
+    "confidence": 1,
+    "updated_at": "<ISO8601>"
+  }
+]
+```
+
+### 29.7 Error handling improvement
+
+New event: `project_brain_snapshot_persistence_failure` logs:
+
+- operation, projectId, memoryKey
+- httpStatus, supabaseErrorCode, sanitized supabaseErrorMessage
+- errorCategory (`snapshot_validation_failed`, `snapshot_serialization_failed`, `snapshot_write_failed`, `snapshot_readback_failed`, `snapshot_schema_incompatible`, `snapshot_conflict_failed`)
+- payloadByteLength, serializationSucceeded, writeAttempted, writeMayHaveSucceeded, readBackFailed, resolvedSource
+
+Internal codes now distinguish write / readback / schema / conflict / serialization failures.
+
+### 29.8 Recovery behavior for affected project
+
+On next generation retry (or explicit recovery):
+
+1. Load existing workflow (5 milestones, 20 steps) — **zero OpenAI**.
+2. `ensureBrainSnapshotForReadyWorkflow()` reconstructs snapshot from normalized rows.
+3. Persist with `source: system` + read-back validation.
+4. Set `brain_status: ready`, clear `snapshot_persistence_error`.
+5. No duplicate workflow/milestone/step rows.
+
+Inspection: `node scripts/inspect-project-brain-snapshot-state.mjs c1daf2f8-4576-4dfb-9213-8b88e637fe19` (or SQL in script output).
+
+### 29.9 Tests and results
+
+| Suite | Result |
+|-------|--------|
+| `test:projects-brain-snapshot-memory-fix` | 14/14 pass |
+| `test:projects-brain-snapshot-integrity` | 13/13 pass |
+| `test:projects-intent` (full) | **511/511 pass** |
+
+### 29.10 Polling observation (mobile, report-only)
+
+From `useProjectWorkflow.ts`:
+
+- **Interval:** `POLL_INTERVAL_MS = 2000` (2 seconds).
+- **Endpoint:** `GET /api/projects-workflow` (read-only, zero OpenAI).
+- **Stops on terminal status:** `ready` or `failed` (`isTerminalGenerationStatus`).
+- **Stops on unmount / projectId change:** clears poll timer and orchestration ref.
+- **Duplicate poll prevention:** `pollActive` guard + single `pollTimerRef`.
+
+Live Vercel logs showing many successful workflow reads during generation failure are **expected** — mobile polls while `brain_status` is non-terminal; polling does not trigger regeneration or OpenAI.
+
+### 29.11 Migration required?
+
+**NO** for this fix. The existing schema supports snapshot persistence when `source` uses an allowed value (`system`).
+
+Optional future migration (not implemented): extend CHECK to include `brain_snapshot` as explicit source label for observability.
+
+### 29.12 Investigation confirmations
+
+- **OpenAI called during investigation:** NO
+- **Commit:** NO
+- **Push:** NO
+- **Deployment:** NO
+- **Live data modified:** NO
+
+### 29.13 Live Preview YES/NO
+
+1. **Did the original roadmap OpenAI call succeed?** — **YES**
+2. **Were workflow, milestones and steps persisted?** — **YES**
+3. **Was snapshot persistence the only failed stage?** — **YES**
+4. **Is the exact Supabase error now visible safely?** — **YES** (sanitized metadata in logs)
+5. **Does the implementation use the real project_memory contract?** — **YES**
+6. **Can the affected project recover with zero OpenAI calls?** — **YES**
+7. **Can recovery create duplicate roadmap rows?** — **NO**
+8. **Does snapshot success require read-back validation?** — **YES**
+9. **Is a database migration required?** — **NO**
+10. **Did all tests pass?** — **YES** (511/511)
+11. **Was any OpenAI call made during this investigation?** — **NO**
+12. **Was any deployment performed?** — **NO**
 
 ### Technical Debt Checklist
 
