@@ -120,7 +120,25 @@ function createIntegrityFetchMock({
         if (snapshotPersistFails) {
           return new Response(JSON.stringify([]), { status: 500 });
         }
-        return new Response(JSON.stringify([{ memory_key: "brain_snapshot_v1" }]), { status: 201 });
+        const posted = JSON.parse(String(init.body || "[]"));
+        for (const row of posted) {
+          const index = memoryRows.findIndex((item) => item.memory_key === row.memory_key);
+          const stored = {
+            ...row,
+            id: `mem-${row.memory_key}`,
+            created_at: new Date().toISOString(),
+          };
+          if (index >= 0) {
+            memoryRows[index] = stored;
+          } else {
+            memoryRows.push(stored);
+          }
+        }
+        return new Response(JSON.stringify(posted.map((row) => ({
+          ...row,
+          id: `mem-${row.memory_key}`,
+          created_at: new Date().toISOString(),
+        }))), { status: 201 });
       }
       return new Response(JSON.stringify(memoryRows), { status: 200 });
     }

@@ -78,13 +78,19 @@ export default async function handler(req, res) {
         actionId,
         stage: "execute_action_failed",
         serviceCode: result.code,
+        recoverable: mapped.recoverable ?? result.recoverable ?? false,
+        retryAllowed: mapped.retryAllowed ?? result.retryAllowed ?? false,
       });
       sendError(
         res,
         mapped.status,
         mapped.code,
         mapped.message,
-        result.details || result.fields || result.missingRequirements || null,
+        {
+          ...(result.details || result.fields || result.missingRequirements || null),
+          recoverable: mapped.recoverable ?? result.recoverable ?? false,
+          retryAllowed: mapped.retryAllowed ?? result.retryAllowed ?? false,
+        },
       );
       return;
     }
