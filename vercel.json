@@ -6,9 +6,6 @@
   "functions": {
     "api/projects-*.js": {
       "includeFiles": "{lib/**,tools/**}"
-    },
-    "api/projects-execute-action.js": {
-      "maxDuration": 300
     }
   }
 }

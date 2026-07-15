@@ -13,6 +13,10 @@ import {
   safeAcceptedInputMetadata,
 } from "../lib/projects/brain/actions/execute-action-stage-log.js";
 
+export const config = {
+  maxDuration: 300,
+};
+
 export default async function handler(req, res) {
   const guard = await guardRequest(req, res, { authMode: "user" });
   if (!guard.ok) return;
